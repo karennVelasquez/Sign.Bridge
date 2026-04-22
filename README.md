@@ -1,4 +1,4 @@
-# 🖐️ SignLens — Traductor de Lenguaje de Señas en Tiempo Real
+# 🖐️ Sign.Bridge — Traductor de Lenguaje de Señas en Tiempo Real
 
 Sistema de reconocimiento de señas estáticas en tiempo real usando una **CNN (Conv1D)**
 entrenada con tus propios gestos mediante webcam. Detecta **mano izquierda y mano derecha**
