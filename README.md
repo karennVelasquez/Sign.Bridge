@@ -6,7 +6,7 @@ de forma independiente gracias a **MediaPipe Hands**.
 
 ---
 
-## 📋 Arquitectura
+## Arquitectura
 
 ```
 Webcam → MediaPipe Hands → Landmarks (126 features)
@@ -32,7 +32,7 @@ Input(126) → Reshape(21,6) → Conv1D(64) → Conv1D(128) → Conv1D(256)
 
 ---
 
-## ⚙️ Instalación
+## Instalación
 
 ```bash
 pip install -r requirements.txt
@@ -42,7 +42,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🚀 Uso paso a paso
+## Uso paso a paso
 
 ### 1. Recolectar datos para cada seña
 
@@ -74,7 +74,7 @@ python main.py --list
 
 Salida ejemplo:
 ```
-📚 Palabras registradas (4):
+Palabras registradas (4):
    ✦ GRACIAS             215 muestras
    ✦ HOLA                200 muestras
    ✦ NO                  198 muestras
@@ -123,7 +123,7 @@ python main.py --train    # re-entrena sin esa seña
 
 ---
 
-## 📊 Parámetros configurables
+## Parámetros configurables
 
 ```bash
 python main.py --collect HOLA --samples 300  # más muestras
@@ -133,7 +133,7 @@ python main.py --camera 1                     # segunda cámara
 
 ---
 
-## 📁 Estructura del proyecto
+## Estructura del proyecto
 
 ```
 sign_language_translator/
@@ -165,7 +165,7 @@ sign_language_translator/
 
 ---
 
-## 🔧 Ajustes avanzados (en translator.py)
+## Ajustes avanzados (en translator.py)
 
 ```python
 CONFIDENCE_THRESHOLD = 0.70   # mínimo para mostrar predicción (0.0–1.0)
@@ -176,7 +176,7 @@ HISTORY_MAX          = 8      # palabras visibles en el historial
 
 ---
 
-## ❓ Problemas frecuentes
+## Problemas frecuentes
 
 | Problema | Solución |
 |----------|----------|
