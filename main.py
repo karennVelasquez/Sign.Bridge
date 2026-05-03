@@ -44,27 +44,27 @@ def main():
     if args.list:
         words = storage.list_words()
         if not words:
-            print("\n⚠️  No hay palabras entrenadas aún.")
+            print("\n  No hay palabras entrenadas aún.")
             print("   Usa: python main.py --collect HOLA\n")
         else:
-            print(f"\n📚 Palabras registradas ({len(words)}):")
+            print(f"\n Palabras registradas ({len(words)}):")
             for w in words:
                 count = storage.count_samples(w)
-                print(f"   ✦ {w:<20} {count} muestras")
+                print(f"   {w:<20} {count} muestras")
             print()
         return
 
     if args.delete:
         word = args.delete.upper()
         if storage.delete_word(word):
-            print(f"\n🗑️  Datos de '{word}' eliminados.\n")
+            print(f"\n  Datos de '{word}' eliminados.\n")
         else:
-            print(f"\n⚠️  No se encontraron datos para '{word}'.\n")
+            print(f"\n  No se encontraron datos para '{word}'.\n")
         return
 
     if args.collect:
         word = args.collect.upper()
-        print(f"\n📷 Iniciando recolección para: '{word}'")
+        print(f"\n Iniciando recolección para: '{word}'")
         print(f"   Muestras objetivo: {args.samples}")
         print(f"   Presiona [E] para empezar/pausar | [Q] para salir\n")
         collector = DataCollector(camera_index=args.camera)
@@ -74,11 +74,11 @@ def main():
     if args.train:
         words = storage.list_words()
         if len(words) < 2:
-            print(f"\n⚠️  Necesitas al menos 2 palabras para entrenar.")
+            print(f"\n  Necesitas al menos 2 palabras para entrenar.")
             print(f"   Actualmente tienes: {words if words else 'ninguna'}")
             print(f"   Usa: python main.py --collect PALABRA\n")
             sys.exit(1)
-        print(f"\n🧠 Iniciando entrenamiento CNN...")
+        print(f"\n Iniciando entrenamiento CNN...")
         print(f"   Palabras: {words}")
         print(f"   Épocas: {args.epochs}\n")
         trainer = ModelTrainer()
@@ -87,7 +87,7 @@ def main():
 
     # Default: Modo traducción en tiempo real
     if not storage.model_exists():
-        print("\n⚠️  No hay modelo entrenado.")
+        print("\n  No hay modelo entrenado.")
         words = storage.list_words()
         if len(words) >= 2:
             print(f"   Tienes datos para: {words}")
