@@ -11,7 +11,7 @@ from pathlib import Path
 
 BASE_DIR    = Path("data")
 MODEL_DIR   = Path("models")
-MODEL_PATH  = MODEL_DIR / "sign_model.keras"
+MODEL_PATH  = MODEL_DIR / "sign_model.h5"
 LABELS_PATH = MODEL_DIR / "labels.json"
 META_PATH   = BASE_DIR / "metadata.json"
 
