@@ -1,0 +1,26 @@
+# Datos y modelos
+data/
+models/
+
+# MediaPipe model
+utils/hand_landmarker.task
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Entornos
+.env
+.venv
+env/
+venv/
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode/
+.idea/
