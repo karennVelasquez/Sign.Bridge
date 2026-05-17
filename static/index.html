@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SignBridge — Traductor LSC en Tiempo Real</title>
+<link rel="icon" type="image/png" href="/static/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ═══ NAV ═══ -->
+<nav>
+  <div class="logo" onclick="showView('landing')">
+    <img src="/static/logo.png" alt="SignBridge logo" class="logo-img">
+    <span>Sign<em>Bridge</em></span>
+  </div>
+
+  <!-- Tabs landing -->
+  <div class="nav-c" id="nav-landing-tabs">
+    <button class="n-tab" onclick="scrollAnchor('#how')">Cómo funciona</button>
+    <button class="n-tab" onclick="scrollAnchor('#team')">Equipo</button>
+  </div>
+
+  <!-- Tabs app -->
+  <div class="nav-c" id="nav-app-tabs" style="display:none">
+    <button class="n-tab active" onclick="showAppPanel('capture',this)"> Capturar</button>
+    <button class="n-tab" onclick="showAppPanel('train',this)"> Entrenar</button>
+    <button class="n-tab" onclick="showAppPanel('predict',this)"> Predecir</button>
+    <button class="n-tab" onclick="showAppPanel('dictionary',this)"> Diccionario</button>
+  </div>
+
+  <div id="conn-status" class="status-pill off" style="display:none">
+    <div class="dot" id="conn-dot"></div>
+    <span id="conn-text">Desconectado</span>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════
+     LANDING
+═══════════════════════════════════════════ -->
+<div id="view-landing" class="view active">
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-grid"></div>
+    <img src="/static/logo.png" alt="SignBridge" class="hero-logo">
+    <h1>El traductor de señas<br>que <em>entiendes tú</em></h1>
+    <div class="hero-actions">
+      <button class="btn-hp" onclick="showView('app')">Abrir el traductor</button>
+      <a href="https://github.com/karennVelasquez/Sign.Bridge" target="_blank" class="btn-hg">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.741 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+        Ver en GitHub
+      </a>
+    </div>
+  </section>
+  <!-- Cómo funciona -->
+  <section class="how-section" id="how">
+    <div class="how-layout">
+      <div>
+        <div class="reveal">
+          <span class="section-tag">Cómo funciona</span>
+          <h2>Del gesto a las palabras, en tiempo real</h2>
+          <p class="section-sub">Pipeline completo que corre en tu máquina. Sin internet externo, sin servidores remotos.</p>
+        </div>
+        <div class="steps-list">
+          <div class="step-row reveal">
+            <div class="step-n">1</div>
+            <div class="step-body">
+              <h4>Escribe la seña y captura muestras</h4>
+              <p>Defines el nombre de la seña (ej. "HOLA"), apuntas la cámara y grabas 200+ muestras con tu mano.</p>
+            </div>
+          </div>
+          <div class="step-row reveal">
+            <div class="step-n">2</div>
+            <div class="step-body">
+              <h4>MediaPipe extrae 126 landmarks</h4>
+              <p>Cada frame se convierte en un vector de 21 puntos × (x,y,z) por mano, normalizado respecto a la muñeca.</p>
+            </div>
+          </div>
+          <div class="step-row reveal">
+            <div class="step-n">3</div>
+            <div class="step-body">
+              <h4>Conv1D CNN clasifica la seña</h4>
+              <p>La red (64→128→256 filtros + Dense) predice qué seña es con suavizado sobre 10 frames.</p>
+            </div>
+          </div>
+          <div class="step-row reveal">
+            <div class="step-n">4</div>
+            <div class="step-body">
+              <h4>Texto en pantalla al instante</h4>
+              <p>Cada seña confirmada aparece en el historial. Puedes copiarla o escucharla con síntesis de voz.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+<div class="laptop-wrap reveal">
+  <div class="laptop">
+    <div class="laptop-cam-dot"></div>
+    <div class="laptop-screen">
+      <div class="ls-nav">
+        <img src="/static/logo.png" alt="SB" class="ls-logo">
+        <span class="ls-title">SignBridge</span>
+        <div class="ls-tabs">
+          <span class="ls-tab ls-tab-active">Capturar</span>
+          <span class="ls-tab">Predecir</span>
+        </div>
+        <span class="ls-conn">● Conectado</span>
+      </div>
+      <div class="ls-body">
+        <div class="ls-cam">
+          <div class="ls-scan"></div>
+          <img class="ls-hand-img" id="ph-hand-img" src="/static/hola.png" alt="seña">
+          <div class="ls-rec">● REC</div>
+          <div class="ls-box"></div>
+        </div>
+        <div class="ls-panel">
+          <div class="ls-detect-lbl">Seña detectada</div>
+          <div class="ls-letter" id="ph-word">HOLA</div>
+          <div class="ls-conf-row">
+            <div class="ls-conf-bar"><div class="ls-conf-fill"></div></div>
+            <span class="ls-conf-pct">94%</span>
+          </div>
+          <div class="ls-history-lbl">Historial</div>
+          <div class="ls-history">
+            <span class="ls-chip">HOLA</span>
+            <span class="ls-chip">POR FAVOR</span>
+            <span class="ls-chip ls-chip-new" id="ph-chip">HOLA</span>
+          </div>
+          <div class="ls-progress">
+            <div class="ls-prog-bar"><div class="ls-prog-fill"></div></div>
+            <div class="ls-prog-meta"><span>115 / 200 muestras</span><span>57%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="laptop-hinge"></div>
+    <div class="laptop-base">
+      <div class="laptop-trackpad"></div>
+    </div>
+  </div>
+</div>
+  </section>
+
+  <!-- Arquitectura -->
+  <section class="arch-section">
+    <div class="reveal">
+      <span class="section-tag">Arquitectura</span>
+      <h2>Pipeline técnico</h2>
+      <p class="section-sub">Webcam → Landmarks → CNN → Predicción. Todo local, todo rápido.</p>
+    </div>
+    <div class="arch-flow reveal">
+      <div class="arch-step"><span class="arch-icon"></span><div class="arch-name">Webcam</div><div class="arch-desc">1280×720 @ 30fps</div></div>
+      <div class="arch-step"><span class="arch-icon"></span><div class="arch-name">MediaPipe</div><div class="arch-desc">126 landmarks norm.</div></div>
+      <div class="arch-step"><span class="arch-icon"></span><div class="arch-name">Conv1D CNN</div><div class="arch-desc">64→128→256 filtros</div></div>
+      <div class="arch-step"><span class="arch-icon"></span><div class="arch-name">Suavizado</div><div class="arch-desc">Ventana 10 frames</div></div>
+      <div class="arch-step"><span class="arch-icon"></span><div class="arch-name">Texto</div><div class="arch-desc">Salida en tiempo real</div></div>
+    </div>
+    <div class="tech-chips-row reveal">
+      <div class="tech-chip"><div class="tc-lbl">Visión</div><div class="tc-n">MediaPipe Hands</div></div>
+      <div class="tech-chip"><div class="tc-lbl">Deep Learning</div><div class="tc-n">TensorFlow / Keras</div></div>
+      <div class="tech-chip"><div class="tc-lbl">Modelo</div><div class="tc-n">Conv1D + Dense</div></div>
+      <div class="tech-chip"><div class="tc-lbl">Interfaz</div><div class="tc-n">OpenCV</div></div>
+      <div class="tech-chip"><div class="tc-lbl">Data augment</div><div class="tc-n">Ruido + Escala + Flip</div></div>
+      <div class="tech-chip"><div class="tc-lbl">Optimización</div><div class="tc-n">Early Stopping</div></div>
+      <div class="tech-chip"><div class="tc-lbl">Lenguaje</div><div class="tc-n">Python 3.9–3.11</div></div>
+      <div class="tech-chip"><div class="tc-lbl">CLI</div><div class="tc-n">argparse</div></div>
+    </div>
+  </section>
+
+  <!-- Equipo -->
+  <section class="team-section" id="team">
+    <div class="reveal">
+      <span class="section-tag">Equipo</span>
+      <h2>Desarrollado por</h2>
+    </div>
+    <div class="team-grid">
+      <div class="team-card reveal">
+        <div class="team-av" style="background:linear-gradient(135deg,#1D6FE8,#0032cc)">KG</div>
+        <h3>Karen García Velásquez</h3>
+        <p>Desarrolladora principal · IA & Backend</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-logo">SignBridge</div>
+    <div class="footer-links">
+      <a href="https://github.com/karennVelasquez/Sign.Bridge" target="_blank">GitHub</a>
+      <a href="#how">Cómo funciona</a>
+      <a href="#team">Equipo</a>
+    </div>
+    <div style="font-size:.8rem">© 2026 Karen García Velásquez</div>
+  </footer>
+</div><!-- /view-landing -->
+
+
+<!-- ═══════════════════════════════════════════
+     APP
+═══════════════════════════════════════════ -->
+<div id="view-app" class="view">
+<div class="app-inner">
+
+  <div class="conn-error" id="conn-error">
+    ⚠️ No se pudo conectar con <strong>ws://localhost:8000/ws/predict</strong>.
+    Asegúrate de que el servidor esté corriendo: <code>python main.py --server</code>
+  </div>
+
+  <!-- ══ PANEL: CAPTURAR ══ -->
+  <div id="panel-capture" class="app-panel active">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"> Capturar seña nueva</div>
+        <span class="card-hint">Define la seña → activa cámara → graba muestras</span>
+      </div>
+
+      <!-- Formulario: nombre de la seña -->
+      <div class="capture-setup" id="capture-setup-form">
+        <div>
+          <div class="capture-setup-title">¿Qué seña quieres capturar?</div>
+          <div class="capture-setup-sub">Escribe el nombre de la palabra o letra que vas a enseñar al modelo.</div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="input-sign-word">Nombre de la seña</label>
+            <input class="form-input upper" id="input-sign-word" type="text"
+                   placeholder="Ej: HOLA, GRACIAS, A…"
+                   autocomplete="off" spellcheck="false"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="input-sign-samples">Número de muestras</label>
+            <input class="form-input" id="input-sign-samples" type="number"
+                   value="200" min="50" max="500" step="50"/>
+          </div>
+        </div>
+        <div class="capture-actions">
+          <button class="btn btn-primary btn-lg" id="btn-start-capture">
+             Iniciar captura
+          </button>
+          <span style="font-size:12px;color:var(--muted)">Se recomienda 200+ muestras por seña</span>
+        </div>
+      </div>
+
+      <!-- Barra seña activa -->
+      <div class="active-sign-bar" id="active-sign-bar">
+        <div class="asb-left">
+          <span style="font-size:12px;color:var(--muted)">Capturando:</span>
+          <span class="asb-word" id="asb-word">—</span>
+          <span class="asb-meta">
+            <span id="asb-samples-done">0</span> / <span id="asb-samples-target">200</span> muestras
+          </span>
+        </div>
+        <button class="btn btn-danger" id="btn-cancel-capture" style="font-size:12px;padding:6px 12px">
+          ✕ Cancelar
+        </button>
+      </div>
+
+      <!-- Cámara + detector (ocultos hasta que se inicia captura) -->
+      <div id="capture-cam-section" style="display:none">
+        <div class="grid-2" style="padding:0">
+
+          <!-- Cámara -->
+          <div style="display:flex;flex-direction:column">
+            <div class="cam-wrap">
+              <video id="video-capture" autoplay muted playsinline></video>
+              <div class="cam-placeholder" id="cam-ph-cap">
+                <span></span>
+                <p>Activando cámara…</p>
+              </div>
+              <div class="hbox" id="hbox-cap"></div>
+              <div class="clabel" id="cam-label-cap">Detectando mano…</div>
+              <div class="rec-overlay" id="rec-overlay">
+                <div class="rec-dot"></div> REC
+              </div>
+            </div>
+            <div class="cam-controls">
+              <button class="btn btn-success" id="btn-toggle-rec">▶ Grabar</button>
+              <button class="btn btn-secondary" id="btn-cam-cap">⏹ Detener cámara</button>
+            </div>
+            <!-- Progreso -->
+            <div class="capture-progress">
+              <div class="cp-bar-wrap">
+                <div class="cp-bar-fill" id="cp-bar-fill" style="width:0%"></div>
+              </div>
+              <div class="cp-meta">
+                <span id="cp-count">0 / 200 muestras</span>
+                <span id="cp-pct">0%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detector en tiempo real -->
+          <div class="card" style="margin:0">
+            <div class="card-header">
+              <div class="card-title">
+                👁 Seña detectada en vivo
+                <span class="badge badge-info" id="cam-badge-cap">Iniciando…</span>
+              </div>
+            </div>
+            <div class="output-area">
+              <div class="letter-big no-hand" id="letter-display-cap">—</div>
+              <div class="conf-label" id="conf-label-cap">Confianza: 0%</div>
+              <div class="conf-bar">
+                <div class="conf-fill" id="conf-fill-cap" style="width:0%"></div>
+              </div>
+            </div>
+            <div style="padding:12px 17px;font-size:12px;color:var(--muted);border-top:1px solid var(--border)">
+               Mantén la mano visible y presiona <strong>▶ Grabar</strong> para capturar muestras.
+              Varía levemente el ángulo para mayor robustez.
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /capture-cam-section -->
+    </div><!-- /card -->
+
+    <!-- Señas ya registradas -->
+    <div class="card card-gap">
+      <div class="card-header">
+        <div class="card-title"> Señas en el modelo actual</div>
+        <span class="card-hint" id="words-count">Cargando…</span>
+      </div>
+      <div id="words-grid"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-bar" style="margin-top:15px">
+      <div class="stat-card"><div class="stat-icon si-teal">🔤</div><div><div class="stat-val" id="s-letters">0</div><div class="stat-lbl">Señas detectadas</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-teal">✅</div><div><div class="stat-val" id="s-acc">—</div><div class="stat-lbl">Confianza promedio</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-gold">⏱</div><div><div class="stat-val" id="s-time">0s</div><div class="stat-lbl">Tiempo activo</div></div></div>
+    </div>
+  </div><!-- /panel-capture -->
+
+
+  <!-- ══ PANEL: ENTRENAR ══ -->
+  <div id="panel-train" class="app-panel">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"> Entrenar modelo CNN</div>
+        <span class="epoch-badge" id="epoch-badge">Listo</span>
+      </div>
+      <div class="train-card">
+        <p style="font-size:13.5px;color:var(--muted);line-height:1.65">
+          Entrena la red Conv1D con los datos de <code>data/</code>.
+          Incluye aumentación ×3, early stopping y reducción de learning rate automática.
+          Necesitas al menos <strong>2 señas</strong> capturadas.
+        </p>
+        <div class="train-info-grid">
+          <div class="train-info-item"><div class="til">Señas disponibles</div><div class="tiv" id="t-words">—</div></div>
+          <div class="train-info-item"><div class="til">Muestras estimadas</div><div class="tiv" id="t-samples">—</div></div>
+          <div class="train-info-item"><div class="til">Épocas máx.</div><div class="tiv">50 <span style="font-size:12px;color:var(--muted)">(early stop)</span></div></div>
+          <div class="train-info-item"><div class="til">Aumento de datos</div><div class="tiv">×3 <span style="font-size:12px;color:var(--muted)">muestras</span></div></div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill" id="train-prog" style="width:0%"></div></div>
+          <div class="progress-lbl" id="train-prog-lbl">Sin entrenar</div>
+        </div>
+        <div class="train-log" id="train-log">
+          <span class="log-line log-info">// Conecta el backend con: python main.py --server</span>
+          <span class="log-line">// O entrena directamente desde el CLI:</span>
+          <span class="log-line">   python main.py --train</span>
+        </div>
+        <div style="display:flex;gap:9px;flex-wrap:wrap">
+          <button class="btn btn-primary" id="btn-train"> Iniciar entrenamiento</button>
+          <button class="btn btn-secondary" id="btn-clear-log">🗑 Limpiar log</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLI Reference -->
+    <div class="card card-gap">
+      <div class="card-header"><div class="card-title"> Referencia de comandos CLI</div></div>
+      <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+        <div>
+          <div class="word-label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600">1. Recolectar muestras</div>
+          <div class="cli-block">python main.py --collect HOLA<br>python main.py --collect GRACIAS --samples 300<br>python main.py --list</div>
+        </div>
+        <div>
+          <div class="word-label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600">2. Entrenar</div>
+          <div class="cli-block">python main.py --train<br>python main.py --train --epochs 80</div>
+        </div>
+        <div>
+          <div class="word-label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600">3. Predecir en tiempo real (OpenCV)</div>
+          <div class="cli-block">python main.py<br>python main.py --camera 1</div>
+        </div>
+        <div>
+          <div class="word-label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600">4. Servidor web (este front)</div>
+          <div class="cli-block">python main.py --server</div>
+        </div>
+        <div>
+          <div class="word-label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600">5. Eliminar seña</div>
+          <div class="cli-block">python main.py --delete HOLA</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /panel-train -->
+
+
+  <!-- ══ PANEL: PREDECIR ══ -->
+  <div id="panel-predict" class="app-panel">
+    <div class="grid-2">
+      <!-- Cámara predicción -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"> Cámara <span class="badge badge-live" id="cam-badge-pred">Apagada</span></div>
+          <span class="card-hint">Modo predicción en tiempo real</span>
+        </div>
+        <div class="cam-wrap">
+          <video id="video-predict" autoplay muted playsinline></video>
+          <div class="cam-placeholder" id="cam-ph-pred">
+            <span></span>
+            <p>Activa la cámara para predecir señas</p>
+          </div>
+          <div class="hbox" id="hbox-pred"></div>
+          <div class="clabel" id="cam-label-pred">Prediciendo…</div>
+        </div>
+        <div class="cam-controls">
+          <button class="btn btn-primary" id="btn-cam-pred">▶ Iniciar predicción</button>
+          <button class="btn btn-danger" id="btn-clear-pred">✕ Limpiar historial</button>
+        </div>
+      </div>
+
+      <!-- Resultado predicción -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"> Seña detectada <span class="badge badge-gold" id="pred-badge">Esperando modelo</span></div>
+        </div>
+        <div class="output-area">
+          <div class="letter-big no-hand" id="letter-display-pred">—</div>
+          <div class="conf-label" id="conf-label-pred">Confianza: 0%</div>
+          <div class="conf-bar"><div class="conf-fill" id="conf-fill-pred" style="width:0%"></div></div>
+        </div>
+        <div class="word-section">
+          <div class="word-label">Historial de señas</div>
+          <div class="word-text" id="pred-word-display"><span class="cursor-blink"></span></div>
+          <div class="word-actions">
+            <button class="btn btn-primary" id="btn-copy-pred"> Copiar</button>
+            <button class="btn btn-accent" id="btn-speak-pred"> Escuchar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Señas reconocibles -->
+    <div class="card card-gap">
+      <div class="card-header">
+        <div class="card-title"> Señas que el modelo puede reconocer</div>
+        <span class="card-hint" id="pred-words-count">Cargando…</span>
+      </div>
+      <div class="words-grid" id="pred-words-grid"></div>
+    </div>
+
+    <!-- Parámetros -->
+    <div class="card card-gap">
+      <div class="card-header"><div class="card-title"> Parámetros del modelo</div></div>
+      <div style="padding:15px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:11px">
+        <div class="train-info-item"><div class="til">Umbral confianza</div><div class="tiv">70%</div></div>
+        <div class="train-info-item"><div class="til">Ventana suavizado</div><div class="tiv">10 frames</div></div>
+        <div class="train-info-item"><div class="til">Min frames estables</div><div class="tiv">6 frames</div></div>
+        <div class="train-info-item"><div class="til">Historial máximo</div><div class="tiv">8 señas</div></div>
+      </div>
+    </div>
+  </div><!-- /panel-predict -->
+
+
+  <!-- ══ PANEL: DICCIONARIO ══ -->
+  <div id="panel-dictionary" class="app-panel">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"> Alfabeto LSC completo</div>
+        <span class="card-hint">Referencia visual de señas</span>
+      </div>
+      <div class="alpha-grid" id="dict-alpha-grid"></div>
+    </div>
+
+    <div class="card card-gap">
+      <div class="card-header">
+        <div class="card-title"> Señas entrenadas en el modelo actual</div>
+        <span class="card-hint" id="dict-trained-count">—</span>
+      </div>
+      <div id="dict-trained-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:9px;padding:15px"></div>
+    </div>
+  </div><!-- /panel-dictionary -->
+
+</div><!-- /app-inner -->
+</div><!-- /view-app -->
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
