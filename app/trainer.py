@@ -22,7 +22,7 @@ class ModelTrainer:
     def __init__(self):
         self.storage = DataStorage()
 
-    def train(self, epochs: int = 50):
+    def train(self, epochs: int = 50, extra_callbacks=None):
         # ── 1. Cargar datos ────────────────────────────────────────────────
         print("  Cargando dataset…")
         X, y, labels = self.storage.load_dataset()
@@ -64,13 +64,14 @@ class ModelTrainer:
         callbacks = get_callbacks(self.storage.get_model_path())
 
         print("\n  ⏳ Entrenando…\n")
+        all_callbacks = callbacks + (extra_callbacks or [])
         history = model.fit(
             X_train, y_train,
             validation_data=(X_val, y_val),
             epochs=epochs,
             batch_size=32,
             class_weight=cw_dict,
-            callbacks=callbacks,
+            callbacks=all_callbacks,
             verbose=1,
         )
 
