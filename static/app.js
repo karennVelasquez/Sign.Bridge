@@ -5,11 +5,19 @@
 const WS_URL  = 'ws://localhost:8000/ws/predict';
 const API_URL = 'http://localhost:8000';
 const FPS_MS  = 120;
-const COL_MS  = 80;
+const COL_MS  = 100;
 
+// Canvas para predicción WS (compartido)
 const _canvas = document.createElement('canvas');
 _canvas.width = _canvas.height = 320;
 const _ctx = _canvas.getContext('2d');
+
+// Canvas separado para recolección de muestras (evita race condition con WS)
+// Resolución mayor → MediaPipe detecta mejor las manos
+const _collectCanvas = document.createElement('canvas');
+_collectCanvas.width  = 640;
+_collectCanvas.height = 480;
+const _collectCtx = _collectCanvas.getContext('2d');
 
 const SIGNS = {
   A:'👊', B:'✋', C:'🤏', D:'☝️', E:'🤞', F:'👌', G:'👉', H:'🤙',
@@ -99,8 +107,15 @@ function connectWS(onOpen) {
   State.ws.onmessage = e => handlePrediction(JSON.parse(e.data));
   State.ws.onerror   = () => {
     setConnStatus(false);
-    document.getElementById('conn-error').classList.add('visible');
-    showToast('No se pudo conectar. ¿Está corriendo el servidor?', 'error');
+    // Solo mostrar el banner de error si NO estamos en modo captura activa
+    if (!State.camOn) {
+      document.getElementById('conn-error').classList.add('visible');
+    }
+    // No mostrar toast de error si la cámara de captura está activa
+    // (el WS es opcional durante captura, las muestras se guardan igual)
+    if (!State.camOn) {
+      showToast('No se pudo conectar. ¿Está corriendo el servidor?', 'error');
+    }
   };
   State.ws.onclose = () => {
     setConnStatus(false);
@@ -160,6 +175,7 @@ function beginCapture(word, samples) {
 }
 
 function cancelCapture() {
+  stopCollectLoop();
   stopCaptureCamera();
   document.getElementById('active-sign-bar').classList.remove('visible');
   document.getElementById('capture-setup-form').style.display  = '';
@@ -175,13 +191,13 @@ function toggleRecording() {
   const rec = document.getElementById('rec-overlay');
   const lbl = document.getElementById('cam-label-cap');
   if (State.isRecording) {
-    btn.innerHTML = '⏸ Pausar'; btn.className = 'btn btn-danger';
+    if (btn) { btn.innerHTML = '⏸ Pausar'; btn.className = 'btn btn-danger'; }
     rec?.classList.add('visible');
     if (lbl) { lbl.textContent = '● Grabando muestras…'; lbl.classList.add('visible'); }
     showToast('Grabando muestras de "' + State.currentWord + '"', 'info');
     startCollectLoop();
   } else {
-    btn.innerHTML = '▶ Grabar'; btn.className = 'btn btn-success';
+    if (btn) { btn.innerHTML = '▶ Grabar'; btn.className = 'btn btn-success'; }
     rec?.classList.remove('visible');
     if (lbl) lbl.textContent = 'Pausado';
     showToast('Pausado — ' + State.capturedCount + ' muestras guardadas', 'info');
@@ -222,36 +238,86 @@ function startCollectLoop() {
   State.collectInterval = setInterval(async () => {
     if (!State.isRecording) return;
     if (State.capturedCount >= State.targetSamples) { stopCollectLoop(); return; }
-    if (inFlight || !video?.videoWidth) return;
+    if (inFlight) return;
+    if (!video) { console.warn('[collect] sin elemento video'); return; }
+    if (video.readyState < 2) { console.warn('[collect] video.readyState =', video.readyState); return; }
+    if (!video.videoWidth)    { console.warn('[collect] video.videoWidth = 0'); return; }
     inFlight = true;
-    _ctx.drawImage(video, 0, 0, _canvas.width, _canvas.height);
-    const blob = await new Promise(r => _canvas.toBlob(r, 'image/jpeg', 0.9));
-    if (!blob) { inFlight = false; return; }
+
     try {
-      const res  = await fetch(`${API_URL}/api/collect`, {
+      // Dibujar el video al canvas manteniendo proporciones reales del video
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (_collectCanvas.width !== vw || _collectCanvas.height !== vh) {
+        _collectCanvas.width  = vw;
+        _collectCanvas.height = vh;
+        console.log('[collect] canvas redimensionado a', vw, 'x', vh);
+      }
+      _collectCtx.drawImage(video, 0, 0, vw, vh);
+      const blob = await new Promise(r => _collectCanvas.toBlob(r, 'image/jpeg', 0.9));
+      if (!blob) {
+        console.warn('[collect] toBlob retornó null');
+        inFlight = false;
+        return;
+      }
+      // Log solo cada 10 frames para no llenar consola
+      if (!window._collectFrameN) window._collectFrameN = 0;
+      window._collectFrameN++;
+      if (window._collectFrameN % 10 === 1) {
+        console.log('[collect] enviando frame', window._collectFrameN, '- blob:', blob.size, 'bytes, video:', vw + 'x' + vh);
+      }
+
+      const res  = await fetch(`${API_URL}/api/sample`, {
         method: 'POST',
-        headers: { 'X-Word': State.currentWord, 'X-Target': String(State.targetSamples) },
+        headers: {
+          'X-Word':   State.currentWord,
+          'X-Target': String(State.targetSamples),
+        },
         body: blob,
       });
+
+      if (!res.ok) {
+        console.warn('[collect] HTTP error:', res.status, res.statusText);
+        const txt = await res.text();
+        console.warn('[collect] body:', txt);
+        inFlight = false;
+        return;
+      }
       const data = await res.json();
+      console.log('[collect]', data);   // ← log every response for debugging
+
       if (data.saved) {
         State.capturedCount = data.total;
         updateCaptureProgress(data.total, State.targetSamples);
-        if (data.total >= State.targetSamples || data.complete) stopCollectLoop();
+        const lbl = document.getElementById('cam-label-cap');
+        if (lbl) lbl.textContent = `● Grabando (${data.total}/${State.targetSamples})`;
       } else if (data.reason === 'target_reached') {
         State.capturedCount = data.total;
         updateCaptureProgress(data.total, State.targetSamples);
         stopCollectLoop();
+      } else if (data.reason === 'throttle') {
+        // ignorar - se reintentará en el próximo tick
       } else if (data.hand_detected === false) {
         const lbl = document.getElementById('cam-label-cap');
-        if (lbl) lbl.textContent = '✋ Pon tu mano frente a la cámara';
+        if (lbl && State.isRecording) {
+          lbl.textContent = '✋ Pon la mano frente a la cámara';
+          lbl.classList.add('visible');
+        }
+      } else if (data.error) {
+        console.error('[collect] server error:', data.error);
+        showToast('Error: ' + data.error, 'error');
       }
-    } catch (_) {}
-    finally { inFlight = false; }
+    } catch (err) {
+      console.error('[collect] exception:', err);
+    } finally {
+      inFlight = false;
+    }
   }, COL_MS);
 }
 
-function stopCollectLoop() { clearInterval(State.collectInterval); }
+function stopCollectLoop() {
+  clearInterval(State.collectInterval);
+  State.collectInterval = null;
+}
 
 /* ═══════════════════════════════════════════
    CÁMARA — CAPTURA
@@ -266,7 +332,8 @@ async function startCaptureCamera() {
     State.camOn = true;
     _setCamUI('cap', true);
     startTimer();
-    connectWS(() => startWsLoop('cap'));
+    // WS para preview de detección es opcional — no bloquea la captura de muestras
+    try { connectWS(() => startWsLoop('cap')); } catch (_) {}
   } catch (err) {
     showToast('Cámara no disponible: ' + err.message, 'error');
   }
@@ -323,6 +390,9 @@ function startWsLoop(mode) {
   clearInterval(State.wsInterval);
   const videoId = mode === 'cap' ? 'video-capture' : 'video-predict';
   State.wsInterval = setInterval(() => {
+    // No enviar frames al WS mientras se está grabando muestras
+    // (evita saturar el extractor de MediaPipe en el servidor)
+    if (mode === 'cap' && State.isRecording) return;
     const v = document.getElementById(videoId);
     if (!v?.videoWidth) return;
     if (!State.ws || State.ws.readyState !== WebSocket.OPEN) return;
@@ -485,6 +555,109 @@ function renderAlphaGrid(containerId, onClickFn) {
    — muestra solo "Entrenando…" hasta que
      el backend confirma que terminó
 ═══════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════
+   TRAINING CHART
+═══════════════════════════════════════════ */
+
+let _trainChartData = { loss: [], val_loss: [], accuracy: [], val_accuracy: [] };
+
+function _initTrainChart() {
+  _trainChartData = { loss: [], val_loss: [], accuracy: [], val_accuracy: [] };
+  const wrap = document.getElementById('train-chart-wrap');
+  if (wrap) wrap.style.display = 'block';
+  _renderTrainChart();
+}
+
+function _updateTrainChart(history) {
+  if (!history) return;
+  _trainChartData = history;
+  _renderTrainChart();
+}
+
+function _renderTrainChart() {
+  const canvas = document.getElementById('train-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 600;
+  const H = 220;
+  canvas.width  = W * window.devicePixelRatio;
+  canvas.height = H * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+  const PAD = { top: 18, right: 20, bottom: 36, left: 46 };
+  const cW = W - PAD.left - PAD.right;
+  const cH = H - PAD.top  - PAD.bottom;
+
+  // Background
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  ctx.fillRect(0, 0, W, H);
+
+  const epochs = Math.max(
+    _trainChartData.val_accuracy.length,
+    _trainChartData.loss.length, 1
+  );
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = PAD.top + (cH / 4) * i;
+    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke();
+    const val = (1 - i / 4).toFixed(2);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = '10px DM Sans, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(val, PAD.left - 6, y + 4);
+  }
+
+  // X axis labels
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.font = '10px DM Sans, sans-serif';
+  ctx.textAlign = 'center';
+  const xStep = Math.ceil(epochs / 5);
+  for (let e = 0; e <= epochs; e += xStep) {
+    const x = PAD.left + (e / Math.max(epochs - 1, 1)) * cW;
+    ctx.fillText(e, x, H - PAD.bottom + 16);
+  }
+  ctx.fillText('Épocas', PAD.left + cW / 2, H - 4);
+
+  function drawLine(data, color, alpha = 1) {
+    if (!data || data.length < 2) return;
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    data.forEach((v, i) => {
+      const x = PAD.left + (i / Math.max(data.length - 1, 1)) * cW;
+      const y = PAD.top  + (1 - Math.min(Math.max(v, 0), 1)) * cH;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  drawLine(_trainChartData.val_accuracy, '#38d9c0');
+  drawLine(_trainChartData.accuracy,     '#f0c040');
+  drawLine(_trainChartData.val_loss,     '#e05a5a', 0.7);
+  drawLine(_trainChartData.loss,         '#888888', 0.7);
+
+  // Last epoch dot
+  function drawDot(data, color) {
+    if (!data || data.length === 0) return;
+    const i = data.length - 1;
+    const x = PAD.left + (i / Math.max(data.length - 1, 1)) * cW;
+    const y = PAD.top  + (1 - Math.min(Math.max(data[i], 0), 1)) * cH;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+  drawDot(_trainChartData.val_accuracy, '#38d9c0');
+  drawDot(_trainChartData.accuracy,     '#f0c040');
+}
+
 function requestTrain() {
   const prog  = document.getElementById('train-prog');
   const lbl   = document.getElementById('train-prog-lbl');
@@ -493,6 +666,7 @@ function requestTrain() {
 
   // Reset UI
   if (log) log.innerHTML = '';
+  _initTrainChart();
   prog.style.width      = '100%';
   prog.style.background = 'var(--teal)';
   prog.style.animation  = 'pulse-bar 1.5s ease-in-out infinite';
@@ -523,6 +697,13 @@ function _waitForTrainDone(prog, lbl, badge) {
 
   ws.onmessage = (e) => {
     const msg = e.data;
+    // Update chart on each epoch message
+    if (msg.startsWith('Época')) {
+      fetch(API_URL + '/api/train/status')
+        .then(r => r.json())
+        .then(d => { if (d.history) _updateTrainChart(d.history); })
+        .catch(() => {});
+    }
     // El backend envía "✓ Modelo guardado..." cuando termina realmente
     if (msg.includes('Modelo guardado') || msg.includes('✓')) {
       prog.style.animation  = '';
@@ -532,6 +713,11 @@ function _waitForTrainDone(prog, lbl, badge) {
       badge.textContent     = 'Completado ✓';
       showToast('✓ Modelo entrenado. Lista actualizada', 'success');
       loadTrainedWords();
+      // Fetch final chart data
+      fetch(API_URL + '/api/train/status')
+        .then(r => r.json())
+        .then(d => { if (d.history) _updateTrainChart(d.history); })
+        .catch(() => {});
       ws.close();
     }
     if (msg.startsWith('✗')) {
@@ -552,6 +738,7 @@ function _pollTrainDone(prog, lbl, badge) {
     try {
       const r = await fetch(API_URL + '/api/train/status');
       const d = await r.json();
+      if (d.history) _updateTrainChart(d.history);
       if (d.done) {
         clearInterval(iv);
         prog.style.animation  = '';
@@ -561,6 +748,7 @@ function _pollTrainDone(prog, lbl, badge) {
         badge.textContent     = 'Completado ✓';
         showToast('✓ Modelo entrenado. Lista actualizada', 'success');
         loadTrainedWords();
+        if (d.history) _updateTrainChart(d.history);
       }
       if (!d.running && !d.done) {
         clearInterval(iv);
@@ -584,10 +772,13 @@ function clearLog() {
   const prog = document.getElementById('train-prog');
   const lbl  = document.getElementById('train-prog-lbl');
   const badge= document.getElementById('epoch-badge');
+  const wrap = document.getElementById('train-chart-wrap');
   if (log)   log.innerHTML    = '';
   if (prog)  { prog.style.width='0%'; prog.style.animation=''; prog.style.background=''; }
   if (lbl)   lbl.textContent  = 'Sin entrenar';
   if (badge) badge.textContent = 'Listo';
+  if (wrap)  wrap.style.display = 'none';
+  _trainChartData = { loss: [], val_loss: [], accuracy: [], val_accuracy: [] };
 }
 
 /* ═══════════════════════════════════════════
