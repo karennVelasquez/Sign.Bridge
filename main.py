@@ -51,6 +51,7 @@ _last_collect: dict = {}
 MIN_COLLECT_INTERVAL = 0.05
 
 
+
 def _load_model():
     global _model, _labels
     if not storage.model_exists():
@@ -100,7 +101,7 @@ def get_words():
     ]
 
 
-@app.post("/api/collect")
+@app.post("/api/sample")
 async def collect_sample(request: Request):
     word = request.headers.get("X-Word", "").strip().upper()
     if not word:
@@ -125,15 +126,24 @@ async def collect_sample(request: Request):
     _last_collect[word] = now
 
     body  = await request.body()
+    print(f"[/api/sample] {word}: recibido {len(body)} bytes")
+    if len(body) < 100:
+        print(f"[/api/sample] ⚠ Frame demasiado pequeño ({len(body)} bytes)")
+        return JSONResponse({"error": f"Frame muy pequeño: {len(body)} bytes"}, status_code=400)
+
     nparr = np.frombuffer(body, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if frame is None:
-        return JSONResponse({"error": "Frame inválido"}, status_code=400)
+        print("[/api/sample] ⚠ cv2.imdecode retornó None — JPEG inválido")
+        return JSONResponse({"error": "Frame inválido (imdecode falló)"}, status_code=400)
 
+    print(f"[/api/sample] frame decodificado: {frame.shape}")
     frame = cv2.flip(frame, 1)
 
     with _extractor_lock:
         features, info = extractor.process(frame)
+
+    print(f"[/api/sample] MediaPipe → count={info['count']} left={info['left']} right={info['right']}")
 
     if features is None or info["count"] == 0:
         return JSONResponse({"saved": False, "hand_detected": False,
@@ -149,12 +159,14 @@ async def collect_sample(request: Request):
     total = storage.count_samples(word)
 
     return JSONResponse({"saved": True, "hand_detected": True, "word": word,
-                         "total": total, "complete": total >= target})
+                         "total": total, "complete": total >= target,
+                         "hands": info["count"]})
 
 
 # Variable global para rastrear el estado del entrenamiento
 _train_status = {"running": False, "epoch": 0, "total": 50, "done": False,
-                 "val_acc": 0.0, "loss": 0.0, "log": []}
+                 "val_acc": 0.0, "loss": 0.0, "log": [],
+                 "history": {"loss": [], "val_loss": [], "accuracy": [], "val_accuracy": []}}
 
 @app.post("/api/train")
 def train_endpoint():
@@ -169,7 +181,8 @@ def train_endpoint():
         return JSONResponse({"error": "Ya hay un entrenamiento en curso"}, status_code=400)
 
     _train_status = {"running": True, "epoch": 0, "total": 50,
-                     "done": False, "val_acc": 0.0, "loss": 0.0, "log": []}
+                     "done": False, "val_acc": 0.0, "loss": 0.0, "log": [],
+                     "history": {"loss": [], "val_loss": [], "accuracy": [], "val_accuracy": []}}
 
     def _run():
         global _train_status
@@ -198,10 +211,17 @@ def train_endpoint():
                     logs    = logs or {}
                     val_acc = float(logs.get("val_accuracy", logs.get("val_acc", 0)))
                     loss    = float(logs.get("loss", 0))
+                    val_loss = float(logs.get("val_loss", 0))
+                    accuracy = float(logs.get("accuracy", logs.get("acc", 0)))
                     total   = self.params.get("epochs", 50)
                     line    = f"Época {epoch+1}/{total} — loss: {loss:.4f} — val_acc: {val_acc:.4f}"
                     _train_status.update({"epoch": epoch+1, "total": total,
                                         "val_acc": val_acc, "loss": loss})
+                    # Acumular historial para la gráfica
+                    _train_status["history"]["loss"].append(round(loss, 4))
+                    _train_status["history"]["val_loss"].append(round(val_loss, 4))
+                    _train_status["history"]["accuracy"].append(round(accuracy, 4))
+                    _train_status["history"]["val_accuracy"].append(round(val_acc, 4))
                     self._push(line)
 
                 def on_train_end(self, logs=None):

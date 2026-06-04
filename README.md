@@ -1,134 +1,132 @@
-# 🖐️ Sign.Bridge — Traductor de Lenguaje de Señas en Tiempo Real
-
-Sistema de reconocimiento de señas estáticas en tiempo real usando una **CNN (Conv1D)**
-entrenada con tus propios gestos mediante webcam. Detecta **mano izquierda y mano derecha**
-de forma independiente gracias a **MediaPipe Hands**.
+# Sign.Bridge
+Traductor de Lengua de Señas Colombiana (LSC) en tiempo real usando CNN y MediaPipe.
 
 ---
 
-## Arquitectura
+## Requisitos del sistema
 
-```
-Webcam → MediaPipe Hands → Landmarks (126 features)
-                                  ↓
-                         CNN (Conv1D + Dense)
-                                  ↓
-                      Predicción con suavizado temporal
-                                  ↓
-                         Texto en pantalla en tiempo real
-```
-
-**Vector de entrada (126 valores):**
-- `[0:63]`   → 21 landmarks × (x, y, z) — mano **izquierda**
-- `[63:126]` → 21 landmarks × (x, y, z) — mano **derecha**
-- Normalizados: centrado en muñeca + escala por extensión máxima
-
-**Red neuronal:**
-```
-Input(126) → Reshape(21,6) → Conv1D(64) → Conv1D(128) → Conv1D(256)
-           → GlobalAvgPool → Dense(256) → Dropout → Dense(128) → Dropout
-           → Dense(num_clases, softmax)
-```
+- Windows 10 / 11
+- Miniconda (ver instalación abajo)
+- Cámara web
 
 ---
 
 ## Instalación
 
+### 1. Instalar Miniconda
+
+Descargar el instalador desde:
+```
+https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe
+```
+
+Durante la instalación marcar la opción:
+```
+Add Miniconda3 to my PATH environment variable
+```
+
+Reiniciar el equipo al terminar.
+
+### 2. Habilitar scripts en PowerShell
+
+Abrir una terminal y ejecutar:
+```bash
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+Confirmar con `S` cuando pregunte.
+
+### 3. Inicializar conda en PowerShell
+
+```bash
+conda init powershell
+```
+
+Cerrar la terminal y abrir una nueva. Debe aparecer `(base)` al inicio del prompt.
+
+### 4. Clonar el repositorio
+
+```bash
+git clone https://github.com/tu-usuario/tu-repo.git
+cd tu-repo
+```
+
+### 5. Crear el entorno
+
+```bash
+conda create -n signbridge python=3.10.11 -y
+```
+
+### 6. Activar el entorno
+
+```bash
+conda activate signbridge
+```
+
+Debe aparecer `(signbridge)` al inicio del prompt.
+
+### 7. Instalar dependencias
+
 ```bash
 pip install -r requirements.txt
 ```
 
-> **Nota Python:** Requiere Python 3.9–3.11. TensorFlow no soporta Python 3.12+ aún.
+Este proceso puede tardar entre 5 y 15 minutos dependiendo de la conexión.
 
 ---
 
-## Uso paso a paso
+## Uso
 
-### 1. Recolectar datos para cada seña
-
+Cada vez que abras una terminal nueva debes activar el entorno primero:
 ```bash
-python main.py --collect HOLA
-python main.py --collect GRACIAS
-python main.py --collect SI
-python main.py --collect NO
-python main.py --collect POR_FAVOR
+conda activate signbridge
 ```
 
-**Controles durante recolección:**
-| Tecla | Acción |
-|-------|--------|
-| `E`   | Empezar / pausar captura |
-| `Q`   | Salir |
+### Recolectar muestras de una seña
 
-**Consejos:**
-- Captura **200+ muestras** por seña para mejores resultados
-- Varía ligeramente el ángulo y posición de la mano
-- Iluminación uniforme
-- Puedes usar **una sola mano** o **ambas** según la seña
+```bash
+python main.py --collect A
+```
 
-### 2. Ver las señas registradas
+Controles durante la recolección:
+- `E` — iniciar / pausar captura
+- `Q` — salir
+
+Se recomienda un mínimo de 200 muestras por seña. Variar ligeramente el ángulo y posición de la mano entre capturas.
+
+### Ver señas registradas
 
 ```bash
 python main.py --list
 ```
 
-Salida ejemplo:
-```
-Palabras registradas (4):
-   ✦ GRACIAS             215 muestras
-   ✦ HOLA                200 muestras
-   ✦ NO                  198 muestras
-   ✦ SI                  202 muestras
-```
+### Entrenar el modelo
 
-### 3. Entrenar el modelo
+Se requieren mínimo 2 señas recolectadas antes de entrenar.
 
 ```bash
 python main.py --train
-# o con más épocas:
+```
+
+Opciones adicionales:
+```bash
 python main.py --train --epochs 80
 ```
 
-El entrenamiento incluye:
-- **Aumentación de datos** (ruido + escala + volteo)
-- **Early stopping** automático
-- **Reducción de learning rate** al estancarse
-- Guardado del **mejor modelo** por val_accuracy
-
-### 4. Traducción en tiempo real
+### Ejecutar el traductor en tiempo real
 
 ```bash
 python main.py
 ```
 
-**Controles durante traducción:**
-| Tecla | Acción |
-|-------|--------|
-| `C`   | Limpiar historial de palabras |
-| `Q`   | Salir |
-
-### 5. Agregar nuevas señas (sin borrar las anteriores)
-
+Si tienes más de una cámara:
 ```bash
-python main.py --collect NUEVA_SEÑA
-python main.py --train    # re-entrena con todas las señas
+python main.py --camera 1
 ```
 
-### 6. Eliminar una seña
+### Eliminar una seña
 
 ```bash
-python main.py --delete HOLA
-python main.py --train    # re-entrena sin esa seña
-```
-
----
-
-## Parámetros configurables
-
-```bash
-python main.py --collect HOLA --samples 300  # más muestras
-python main.py --train --epochs 100           # más épocas
-python main.py --camera 1                     # segunda cámara
+python main.py --delete A
 ```
 
 ---
@@ -136,52 +134,76 @@ python main.py --camera 1                     # segunda cámara
 ## Estructura del proyecto
 
 ```
-sign_language_translator/
-│
-├── main.py                  # Punto de entrada (CLI)
+Sign.Bridge/
+├── main.py                  # Punto de entrada y CLI
+├── requirements.txt         # Dependencias Python
 │
 ├── app/
 │   ├── collector.py         # Recolección de muestras por webcam
-│   ├── trainer.py           # Entrenamiento CNN
-│   └── translator.py        # Inferencia en tiempo real
+│   ├── trainer.py           # Entrenamiento del modelo CNN
+│   └── translator.py        # Traducción en tiempo real
 │
 ├── utils/
-│   ├── hands.py             # MediaPipe: extracción y normalización de landmarks
+│   ├── hands.py             # Detección de manos con MediaPipe Tasks
 │   ├── model.py             # Arquitectura CNN (Conv1D)
-│   └── storage.py           # Gestión de archivos (datos, modelo, etiquetas)
+│   ├── storage.py           # Gestión de archivos y modelo
+│   └── hand_landmarker.task # Modelo MediaPipe (se descarga automáticamente)
 │
-├── data/                    # (auto-generado) Muestras .npy por seña
-│   ├── HOLA/
-│   │   ├── 00000.npy
-│   │   └── ...
-│   └── GRACIAS/
-│
-├── models/                  # (auto-generado)
-│   ├── sign_model.keras     # Modelo entrenado
-│   └── labels.json          # Lista de señas
-│
-└── requirements.txt
+├── data/                    # Muestras recolectadas por seña (no se sube al repo)
+└── models/                  # Modelo entrenado (no se sube al repo)
+    ├── sign_model.h5
+    └── labels.json
 ```
 
 ---
 
-## Ajustes avanzados (en translator.py)
+## Dependencias principales
 
-```python
-CONFIDENCE_THRESHOLD = 0.70   # mínimo para mostrar predicción (0.0–1.0)
-SMOOTHING_WINDOW     = 10     # frames para suavizado (más = más lento pero estable)
-MIN_STABLE_FRAMES    = 6      # frames seguidos para confirmar una palabra
-HISTORY_MAX          = 8      # palabras visibles en el historial
-```
+| Librería | Versión | Uso |
+|---|---|---|
+| TensorFlow | 2.13.0 | Entrenamiento e inferencia |
+| MediaPipe | >= 0.10.9 | Detección de landmarks de manos |
+| OpenCV | 4.8.1.78 | Captura de video y visualización |
+| scikit-learn | 1.3.2 | Aumentación y métricas |
+| FastAPI | 0.103.2 | Servidor web (opcional) |
+| pyttsx3 | 2.90 | Síntesis de voz offline |
 
 ---
 
-## Problemas frecuentes
+## Notas importantes
 
-| Problema | Solución |
-|----------|----------|
-| `No se pudo abrir la cámara 0` | Prueba `--camera 1` o `--camera 2` |
-| Precisión baja | Recolecta más muestras (300+), mejora iluminación |
-| "Necesitas al menos 2 palabras" | Recolecta datos para 2+ señas antes de entrenar |
-| Predicciones inestables | Aumenta `SMOOTHING_WINDOW` y `MIN_STABLE_FRAMES` |
-| TensorFlow no instala | Usa Python 3.10 o 3.11, no 3.12 |
+**Modelo MediaPipe:** La primera vez que se ejecuta el proyecto se descarga automáticamente el archivo `hand_landmarker.task` (~8 MB) en la carpeta `utils/`. Este archivo no se sube al repositorio.
+
+**Datos y modelo entrenado:** Las carpetas `data/` y `models/` están excluidas del repositorio. Cada equipo debe recolectar sus propias muestras y entrenar, o compartir estas carpetas por otro medio (OneDrive, Google Drive, etc.).
+
+**Mensajes en consola:** Los mensajes `W0000`, `E0000` e `INFO` que aparecen al ejecutar son advertencias internas de MediaPipe y TensorFlow, no afectan el funcionamiento del sistema.
+
+**Indicador de estabilidad:** En la ventana del traductor, la barra de estabilidad muestra `###---` donde `#` representa los frames consecutivos acumulados y `-` los que faltan para confirmar la seña. Al llegar a `######` la seña se confirma.
+
+**Compatibilidad:** El proyecto funciona con Python 3.10.x y 3.11.x. Se recomienda usar el entorno Conda especificado para garantizar compatibilidad entre equipos.
+
+---
+
+## Flujo recomendado para un equipo nuevo
+
+```bash
+# 1. Instalar Miniconda y reiniciar el equipo
+# 2. Abrir terminal
+
+conda init powershell
+# Cerrar y abrir terminal nueva
+
+conda create -n signbridge python=3.10.11 -y
+conda activate signbridge
+pip install -r requirements.txt
+
+# 3. Recolectar datos (repetir para cada seña)
+python main.py --collect A
+python main.py --collect B
+
+# 4. Entrenar
+python main.py --train
+
+# 5. Traducir
+python main.py
+```
