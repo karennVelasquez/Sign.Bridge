@@ -20,18 +20,12 @@ from utils.model import build_model, get_callbacks
 
 def plot_training_history(history, save_path=None):
     """
-    Muestra (y opcionalmente guarda) la gráfica de curvas de entrenamiento.
-    Funciona aunque no haya pantalla (guarda PNG en ese caso).
+    Guarda la gráfica de curvas de entrenamiento como PNG.
+    Usa siempre el backend 'Agg' (sin GUI) — el frontend mostrará el PNG.
     """
     try:
         import matplotlib
-        # Si no hay display disponible, usar backend sin ventana
-        try:
-            import matplotlib.pyplot as plt
-            plt.figure()          # prueba si hay display
-            plt.close()
-        except Exception:
-            matplotlib.use('Agg')
+        matplotlib.use('Agg')   # SIEMPRE sin GUI (evita warnings de thread)
         import matplotlib.pyplot as plt
         import matplotlib.gridspec as gridspec
     except ImportError:
@@ -121,12 +115,8 @@ def plot_training_history(history, save_path=None):
     except Exception as e:
         print(f"  ⚠ No se pudo guardar la gráfica: {e}")
 
-    # Intentar mostrar ventana (falla silenciosamente si no hay display)
-    try:
-        plt.show()
-    except Exception:
-        pass
-    plt.close()
+    # NO mostramos ventana: el frontend muestra el PNG via /api/train/chart
+    plt.close('all')
 
 
 class ModelTrainer:

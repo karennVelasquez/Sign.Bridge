@@ -557,106 +557,30 @@ function renderAlphaGrid(containerId, onClickFn) {
 ═══════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════
-   TRAINING CHART
+   TRAINING CHART — muestra el PNG generado por matplotlib
 ═══════════════════════════════════════════ */
 
-let _trainChartData = { loss: [], val_loss: [], accuracy: [], val_accuracy: [] };
-
 function _initTrainChart() {
-  _trainChartData = { loss: [], val_loss: [], accuracy: [], val_accuracy: [] };
   const wrap = document.getElementById('train-chart-wrap');
-  if (wrap) wrap.style.display = 'block';
-  _renderTrainChart();
+  if (wrap) wrap.style.display = 'none';   // se mostrará al terminar
 }
 
-function _updateTrainChart(history) {
-  if (!history) return;
-  _trainChartData = history;
-  _renderTrainChart();
+function _showTrainChart() {
+  const wrap = document.getElementById('train-chart-wrap');
+  const img  = document.getElementById('train-chart-img');
+  if (!wrap || !img) {
+    console.warn('[chart] elementos no encontrados');
+    return;
+  }
+  // Cache-bust: añade timestamp para forzar recarga del PNG
+  img.src = `${API_URL}/api/train/chart?t=${Date.now()}`;
+  img.onload  = () => console.log('[chart] PNG cargado');
+  img.onerror = () => console.warn('[chart] no se pudo cargar el PNG');
+  wrap.style.display = 'block';
 }
 
-function _renderTrainChart() {
-  const canvas = document.getElementById('train-chart');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.offsetWidth || 600;
-  const H = 220;
-  canvas.width  = W * window.devicePixelRatio;
-  canvas.height = H * window.devicePixelRatio;
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-
-  const PAD = { top: 18, right: 20, bottom: 36, left: 46 };
-  const cW = W - PAD.left - PAD.right;
-  const cH = H - PAD.top  - PAD.bottom;
-
-  // Background
-  ctx.fillStyle = 'rgba(255,255,255,0.03)';
-  ctx.fillRect(0, 0, W, H);
-
-  const epochs = Math.max(
-    _trainChartData.val_accuracy.length,
-    _trainChartData.loss.length, 1
-  );
-
-  // Grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const y = PAD.top + (cH / 4) * i;
-    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke();
-    const val = (1 - i / 4).toFixed(2);
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = '10px DM Sans, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(val, PAD.left - 6, y + 4);
-  }
-
-  // X axis labels
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.font = '10px DM Sans, sans-serif';
-  ctx.textAlign = 'center';
-  const xStep = Math.ceil(epochs / 5);
-  for (let e = 0; e <= epochs; e += xStep) {
-    const x = PAD.left + (e / Math.max(epochs - 1, 1)) * cW;
-    ctx.fillText(e, x, H - PAD.bottom + 16);
-  }
-  ctx.fillText('Épocas', PAD.left + cW / 2, H - 4);
-
-  function drawLine(data, color, alpha = 1) {
-    if (!data || data.length < 2) return;
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = alpha;
-    ctx.lineWidth = 2;
-    ctx.lineJoin = 'round';
-    data.forEach((v, i) => {
-      const x = PAD.left + (i / Math.max(data.length - 1, 1)) * cW;
-      const y = PAD.top  + (1 - Math.min(Math.max(v, 0), 1)) * cH;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-
-  drawLine(_trainChartData.val_accuracy, '#38d9c0');
-  drawLine(_trainChartData.accuracy,     '#f0c040');
-  drawLine(_trainChartData.val_loss,     '#e05a5a', 0.7);
-  drawLine(_trainChartData.loss,         '#888888', 0.7);
-
-  // Last epoch dot
-  function drawDot(data, color) {
-    if (!data || data.length === 0) return;
-    const i = data.length - 1;
-    const x = PAD.left + (i / Math.max(data.length - 1, 1)) * cW;
-    const y = PAD.top  + (1 - Math.min(Math.max(data[i], 0), 1)) * cH;
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-  }
-  drawDot(_trainChartData.val_accuracy, '#38d9c0');
-  drawDot(_trainChartData.accuracy,     '#f0c040');
-}
+// Compatibilidad con el código viejo que llama _updateTrainChart
+function _updateTrainChart() { /* ya no se usa — la imagen se carga al final */ }
 
 function requestTrain() {
   const prog  = document.getElementById('train-prog');
@@ -673,17 +597,22 @@ function requestTrain() {
   lbl.textContent       = 'Entrenando…';
   badge.textContent     = 'Entrenando…';
 
+  console.log('[train] iniciando…');
+
   fetch(API_URL + '/api/train', { method: 'POST' })
     .then(r => r.json())
     .then(d => {
+      console.log('[train] backend respondió:', d);
       if (d.error) {
         _trainError(d.error, prog, lbl, badge);
         return;
       }
-      // Esperar confirmación real del backend por WebSocket
+      // SIEMPRE hacer polling (más fiable que WS); WS es solo bonus para logs
+      _pollTrainDone(prog, lbl, badge);
       _waitForTrainDone(prog, lbl, badge);
     })
-    .catch(() => {
+    .catch((err) => {
+      console.error('[train] error:', err);
       prog.style.animation = '';
       prog.style.width     = '0%';
       lbl.textContent      = 'Usa: python main.py --train';
@@ -704,20 +633,11 @@ function _waitForTrainDone(prog, lbl, badge) {
         .then(d => { if (d.history) _updateTrainChart(d.history); })
         .catch(() => {});
     }
-    // El backend envía "✓ Modelo guardado..." cuando termina realmente
-    if (msg.includes('Modelo guardado') || msg.includes('✓')) {
-      prog.style.animation  = '';
-      prog.style.width      = '100%';
-      prog.style.background = 'linear-gradient(90deg, var(--teal), var(--gold))';
-      lbl.textContent       = 'Entrenamiento completado ✓';
-      badge.textContent     = 'Completado ✓';
-      showToast('✓ Modelo entrenado. Lista actualizada', 'success');
-      loadTrainedWords();
-      // Fetch final chart data
-      fetch(API_URL + '/api/train/status')
-        .then(r => r.json())
-        .then(d => { if (d.history) _updateTrainChart(d.history); })
-        .catch(() => {});
+    // SOLO cerrar al ver "Modelo guardado" (el polling se encarga del resto)
+    if (msg.includes('Modelo guardado')) {
+      console.log('[train/ws] entrenamiento completado');
+      // Pequeño delay para asegurar que el PNG ya está escrito en disco
+      setTimeout(_showTrainChart, 600);
       ws.close();
     }
     if (msg.startsWith('✗')) {
@@ -733,12 +653,27 @@ function _waitForTrainDone(prog, lbl, badge) {
 }
 
 function _pollTrainDone(prog, lbl, badge) {
-  // Fallback: consulta /api/train/status cada 3s
+  // Fuente primaria de verdad: polling cada 1s a /api/train/status
+  let lastEpoch = -1;
   const iv = setInterval(async () => {
     try {
       const r = await fetch(API_URL + '/api/train/status');
       const d = await r.json();
-      if (d.history) _updateTrainChart(d.history);
+
+      // Logear solo cuando cambia la época para no spammear consola
+      if (d.epoch !== lastEpoch) {
+        console.log('[train/status]', { epoch: d.epoch, total: d.total, running: d.running, done: d.done, history_len: d.history?.loss?.length });
+        lastEpoch = d.epoch;
+      }
+
+      // Actualizar barra de progreso por época
+      if (d.epoch && d.total) {
+        const pct = (d.epoch / d.total) * 100;
+        prog.style.width = pct + '%';
+        badge.textContent = `Época ${d.epoch}/${d.total}`;
+        lbl.textContent = `Entrenando… ${Math.round(pct)}%`;
+      }
+
       if (d.done) {
         clearInterval(iv);
         prog.style.animation  = '';
@@ -748,7 +683,8 @@ function _pollTrainDone(prog, lbl, badge) {
         badge.textContent     = 'Completado ✓';
         showToast('✓ Modelo entrenado. Lista actualizada', 'success');
         loadTrainedWords();
-        if (d.history) _updateTrainChart(d.history);
+        _showTrainChart();
+        return;
       }
       if (!d.running && !d.done) {
         clearInterval(iv);
@@ -778,7 +714,6 @@ function clearLog() {
   if (lbl)   lbl.textContent  = 'Sin entrenar';
   if (badge) badge.textContent = 'Listo';
   if (wrap)  wrap.style.display = 'none';
-  _trainChartData = { loss: [], val_loss: [], accuracy: [], val_accuracy: [] };
 }
 
 /* ═══════════════════════════════════════════
