@@ -16,6 +16,7 @@ import json
 import threading
 import time
 import collections
+import os
 
 import cv2
 import numpy as np
@@ -248,6 +249,18 @@ def train_endpoint():
 def train_status():
     """El frontend hace polling a este endpoint para conocer el progreso real."""
     return JSONResponse(_train_status)
+
+
+@app.get("/api/train/chart")
+def train_chart():
+    """Sirve la imagen PNG de la gráfica de entrenamiento."""
+    from fastapi.responses import FileResponse, Response
+    chart_path = "models/training_history.png"
+    if not os.path.exists(chart_path):
+        return Response(status_code=404)
+    # Cache-busting: el archivo cambia cada entrenamiento
+    return FileResponse(chart_path, media_type="image/png",
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 @app.delete("/api/words/{word}")
