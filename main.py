@@ -1,6 +1,4 @@
 """
-main.py — Sign.Bridge  (versión completa con frontend web)
-
 Comandos:
   python main.py --server          → servidor web http://localhost:8000
   python main.py --collect HOLA    → recolección OpenCV (modo terminal)
