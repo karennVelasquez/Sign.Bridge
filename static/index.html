@@ -142,6 +142,7 @@
     </div>
   </div>
 </div>
+  </div><!-- /how-layout -->
   </section>
 
   <!-- Arquitectura -->
@@ -362,15 +363,62 @@
           <span class="log-line">// O entrena directamente desde el CLI:</span>
           <span class="log-line">   python main.py --train</span>
         </div>
-        <div style="display:flex;gap:9px;flex-wrap:wrap">
+        <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-primary" id="btn-train"> Iniciar entrenamiento</button>
           <button class="btn btn-secondary" id="btn-clear-log">🗑 Limpiar log</button>
+        </div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--muted)">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="opt-force" />
+            Forzar reentrenamiento (aunque el dataset no haya cambiado)
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="opt-tsne" />
+            Generar t-SNE (más lento, +20-60s)
+          </label>
         </div>
 
         <!-- Gráfica de entrenamiento -->
         <div id="train-chart-wrap" style="display:none;margin-top:18px">
           <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">📈 Curvas de entrenamiento</div>
           <img id="train-chart-img" alt="Curvas de entrenamiento" style="width:100%;border-radius:10px;background:var(--surface2);display:block" />
+        </div>
+
+        <!-- Top clases con más confusiones (matriz reducida) -->
+        <div id="confusion-wrap" style="display:none;margin-top:18px">
+          <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">🔢 Top clases con más confusiones</div>
+          <img id="confusion-img" alt="Top confusiones" style="width:100%;border-radius:10px;background:var(--surface2);display:block" />
+        </div>
+
+        <!-- Top errores (barras Real → Predicción) -->
+        <div id="top-errors-wrap" style="display:none;margin-top:18px">
+          <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">⚠️ Confusiones más frecuentes</div>
+          <img id="top-errors-img" alt="Top errores" style="width:100%;border-radius:10px;background:var(--surface2);display:block" />
+        </div>
+
+        <!-- Métricas por clase -->
+        <div id="metrics-wrap" style="display:none;margin-top:18px">
+          <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">📊 Precision · Recall · F1-Score por clase</div>
+          <img id="metrics-img" alt="Métricas por clase" style="width:100%;border-radius:10px;background:var(--surface2);display:block" />
+        </div>
+
+        <!-- Distribución de clases -->
+        <div id="distribution-wrap" style="display:none;margin-top:18px">
+          <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">📦 Distribución de muestras por clase</div>
+          <img id="distribution-img" alt="Distribución del dataset" style="width:100%;border-radius:10px;background:var(--surface2);display:block" />
+        </div>
+
+        <!-- t-SNE: generación bajo demanda por seña -->
+        <div id="tsne-wrap" style="display:none;margin-top:18px">
+          <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">🌌 t-SNE de una seña (variación interna)</div>
+          <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+            <select id="tsne-select" class="input" style="min-width:160px;padding:8px 12px;border-radius:8px;background:var(--surface2);color:var(--text);border:1px solid var(--surface3)">
+              <option value="">— Selecciona una seña —</option>
+            </select>
+            <button class="btn btn-secondary" id="btn-tsne-generate">Generar t-SNE</button>
+            <span id="tsne-status" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+          <img id="tsne-img" alt="t-SNE features" style="width:100%;border-radius:10px;background:var(--surface2);display:none" />
         </div>
       </div>
     </div>
