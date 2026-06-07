@@ -561,23 +561,89 @@ function renderAlphaGrid(containerId, onClickFn) {
 ═══════════════════════════════════════════ */
 
 function _initTrainChart() {
-  const wrap = document.getElementById('train-chart-wrap');
-  if (wrap) wrap.style.display = 'none';   // se mostrará al terminar
+  _TRAIN_CHARTS.forEach(c => {
+    const w = document.getElementById(c.wrap);
+    if (w) w.style.display = 'none';
+  });
 }
 
+const _TRAIN_CHARTS = [
+  { wrap: 'train-chart-wrap',  img: 'train-chart-img',  endpoint: '/api/train/chart',              label: 'curvas' },
+  { wrap: 'distribution-wrap', img: 'distribution-img', endpoint: '/api/train/class_distribution', label: 'distribución' },
+  { wrap: 'metrics-wrap',      img: 'metrics-img',      endpoint: '/api/train/class_metrics',      label: 'métricas por clase' },
+  { wrap: 'confusion-wrap',    img: 'confusion-img',    endpoint: '/api/train/confusion',          label: 'top confusiones' },
+  { wrap: 'top-errors-wrap',   img: 'top-errors-img',   endpoint: '/api/train/top_errors',         label: 'top errores' },
+];
+
 function _showTrainChart() {
-  const wrap = document.getElementById('train-chart-wrap');
-  const img  = document.getElementById('train-chart-img');
-  if (!wrap || !img) {
-    console.warn('[chart] elementos no encontrados');
+  const ts = Date.now();
+  _TRAIN_CHARTS.forEach(c => {
+    const wrap = document.getElementById(c.wrap);
+    const img  = document.getElementById(c.img);
+    if (!wrap || !img) return;
+    img.src = `${API_URL}${c.endpoint}?t=${ts}`;
+    img.onload  = () => { console.log(`[chart] ${c.label} cargada`); wrap.style.display = 'block'; };
+    img.onerror = () => { console.warn(`[chart] no se pudo cargar ${c.label}`); wrap.style.display = 'none'; };
+  });
+
+  // Mostrar el bloque t-SNE (con selector) y poblar el dropdown con las señas entrenadas
+  _populateTsneSelector();
+}
+
+async function _populateTsneSelector() {
+  const wrap   = document.getElementById('tsne-wrap');
+  const select = document.getElementById('tsne-select');
+  if (!wrap || !select) return;
+
+  try {
+    const r     = await fetch(API_URL + '/api/words');
+    const data  = await r.json();
+    const words = data.words || [];
+    if (words.length === 0) {
+      wrap.style.display = 'none';
+      return;
+    }
+    select.innerHTML = '<option value="">— Selecciona una seña —</option>' +
+      words.map(w => `<option value="${w}">${w}</option>`).join('');
+    wrap.style.display = 'block';
+  } catch (err) {
+    console.warn('[tsne] no se pudo obtener lista de señas:', err);
+    wrap.style.display = 'none';
+  }
+}
+
+async function _generateTsne() {
+  const select = document.getElementById('tsne-select');
+  const img    = document.getElementById('tsne-img');
+  const status = document.getElementById('tsne-status');
+  if (!select || !img) return;
+
+  const word = select.value;
+  if (!word) {
+    if (status) status.textContent = 'Selecciona una seña primero';
     return;
   }
-  // Cache-bust: añade timestamp para forzar recarga del PNG
-  img.src = `${API_URL}/api/train/chart?t=${Date.now()}`;
-  img.onload  = () => console.log('[chart] PNG cargado');
-  img.onerror = () => console.warn('[chart] no se pudo cargar el PNG');
-  wrap.style.display = 'block';
+
+  if (status) status.textContent = `Generando t-SNE de "${word}"…`;
+  img.style.display = 'none';
+
+  const url = `${API_URL}/api/train/tsne?word=${encodeURIComponent(word)}&t=${Date.now()}`;
+  img.onload = () => {
+    if (status) status.textContent = `✓ t-SNE de "${word}"`;
+    img.style.display = 'block';
+  };
+  img.onerror = () => {
+    if (status) status.textContent = `✗ No se pudo generar (¿muy pocas muestras?)`;
+    img.style.display = 'none';
+  };
+  img.src = url;
 }
+
+// Conectar botón del t-SNE
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('btn-tsne-generate');
+  if (btn) btn.addEventListener('click', _generateTsne);
+});
 
 // Compatibilidad con el código viejo que llama _updateTrainChart
 function _updateTrainChart() { /* ya no se usa — la imagen se carga al final */ }
@@ -599,7 +665,16 @@ function requestTrain() {
 
   console.log('[train] iniciando…');
 
-  fetch(API_URL + '/api/train', { method: 'POST' })
+  // Leer opciones de los checkboxes
+  const force     = document.getElementById('opt-force')?.checked || false;
+  const skipTsne  = !(document.getElementById('opt-tsne')?.checked || false);
+  console.log('[train] opciones:', { force, skip_tsne: skipTsne });
+
+  fetch(API_URL + '/api/train', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ force, skip_tsne: skipTsne }),
+  })
     .then(r => r.json())
     .then(d => {
       console.log('[train] backend respondió:', d);
@@ -714,6 +789,10 @@ function clearLog() {
   if (lbl)   lbl.textContent  = 'Sin entrenar';
   if (badge) badge.textContent = 'Listo';
   if (wrap)  wrap.style.display = 'none';
+  _TRAIN_CHARTS.forEach(c => {
+    const w = document.getElementById(c.wrap);
+    if (w) w.style.display = 'none';
+  });
 }
 
 /* ═══════════════════════════════════════════

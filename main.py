@@ -168,8 +168,17 @@ _train_status = {"running": False, "epoch": 0, "total": 50, "done": False,
                  "history": {"loss": [], "val_loss": [], "accuracy": [], "val_accuracy": []}}
 
 @app.post("/api/train")
-def train_endpoint():
+async def train_endpoint(request: Request):
     global _train_status
+
+    # Parámetros opcionales del body JSON: {force: bool, skip_tsne: bool}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    force     = bool(body.get("force", False))
+    skip_tsne = bool(body.get("skip_tsne", True))
+
     words = storage.list_words()
     if len(words) < 2:
         return JSONResponse(
@@ -227,7 +236,7 @@ def train_endpoint():
                     self._push("✓ Modelo guardado en models/sign_model.keras")
 
             trainer = ModelTrainer()
-            trainer.train(epochs=50, extra_callbacks=[FrontendCallback()])
+            trainer.train(epochs=50, extra_callbacks=[FrontendCallback()], force=force, skip_tsne=skip_tsne)
             _load_model()
             _train_status["done"]    = True
             _train_status["running"] = False
@@ -251,14 +260,70 @@ def train_status():
 
 @app.get("/api/train/chart")
 def train_chart():
-    """Sirve la imagen PNG de la gráfica de entrenamiento."""
+    """Sirve la imagen PNG de las curvas de entrenamiento."""
+    return _serve_png("models/training_history.png")
+
+
+def _serve_png(path: str):
+    """Helper para servir un PNG con anti-cache."""
     from fastapi.responses import FileResponse, Response
-    chart_path = "models/training_history.png"
-    if not os.path.exists(chart_path):
+    if not os.path.exists(path):
         return Response(status_code=404)
-    # Cache-busting: el archivo cambia cada entrenamiento
-    return FileResponse(chart_path, media_type="image/png",
+    return FileResponse(path, media_type="image/png",
                         headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+
+@app.get("/api/train/confusion")
+def train_confusion():
+    """Sirve la matriz reducida (Top-N clases más conflictivas)."""
+    return _serve_png("models/confusion_matrix.png")
+
+
+@app.get("/api/train/top_errors")
+def train_top_errors():
+    """Sirve el gráfico de barras con los Top-K pares más confundidos."""
+    return _serve_png("models/top_errors.png")
+
+
+@app.get("/api/train/class_metrics")
+def train_class_metrics():
+    """Precision/Recall/F1 por clase."""
+    return _serve_png("models/class_metrics.png")
+
+
+@app.get("/api/train/class_distribution")
+def train_class_distribution():
+    """Distribución de muestras por clase."""
+    return _serve_png("models/class_distribution.png")
+
+
+@app.get("/api/train/tsne")
+def train_tsne(word: str = ""):
+    """
+    Genera bajo demanda el t-SNE de UNA seña específica.
+    Si no se especifica `word`, retorna 404 (no hay generación automática).
+    """
+    from fastapi.responses import Response
+    word = word.strip().upper()
+    if not word:
+        return Response(status_code=400, content=b"Falta el parametro 'word'")
+
+    # Generar la imagen al vuelo
+    try:
+        from app.trainer import plot_tsne_features
+        from utils.storage import DataStorage
+        s = DataStorage()
+        X, y, labels = s.load_dataset()
+        if word not in labels:
+            return Response(status_code=404,
+                            content=f"Seña '{word}' no encontrada".encode())
+        plot_tsne_features(X, y, labels, target_label=word,
+                           save_path="models/tsne_features.png")
+    except Exception as e:
+        print(f"⚠ Error generando t-SNE: {e}")
+        return Response(status_code=500, content=str(e).encode())
+
+    return _serve_png("models/tsne_features.png")
 
 
 @app.delete("/api/words/{word}")
