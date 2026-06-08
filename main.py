@@ -1,8 +1,11 @@
 """
+main.py — Sign.Bridge  (versión completa con frontend web)
+
 Comandos:
   python main.py --server          → servidor web http://localhost:8000
   python main.py --collect HOLA    → recolección OpenCV (modo terminal)
   python main.py --train           → entrenar CNN
+  python main.py --predict         → inferencia en vivo (ventana OpenCV)
   python main.py --list            → listar señas
   python main.py --delete HOLA     → borrar seña
   python main.py                   → predicción OpenCV (si hay modelo)
@@ -385,9 +388,13 @@ async def websocket_predict(websocket: WebSocket):
             if features is None or info["count"] == 0:
                 pred_buffer.append(None)
                 stable_count = 0
+                stable_word  = None
                 await websocket.send_text(json.dumps(
                     {"letter": "—", "confidence": 0,
-                     "hand_detected": False, "stable": False}
+                     "hand_detected": False, "stable": False,
+                     "stable_count": 0, "stable_needed": MIN_STABLE_FRAMES,
+                     "top_predictions": [], "hands": 0,
+                     "left": False, "right": False}
                 ))
                 continue
 
@@ -432,11 +439,24 @@ async def websocket_predict(websocket: WebSocket):
 
             is_stable = stable_count >= MIN_STABLE_FRAMES
 
+            # Top-5 predicciones (igual que el translator del backend)
+            top5_idx = np.argsort(probs)[::-1][:5]
+            top_predictions = [
+                {"label": labels[i], "conf": round(float(probs[i]) * 100)}
+                for i in top5_idx
+            ]
+
             await websocket.send_text(json.dumps({
-                "letter":        top_word or "—",
-                "confidence":    round(smooth_conf * 100),
-                "hand_detected": True,
-                "stable":        is_stable,
+                "letter":          top_word or "—",
+                "confidence":      round(smooth_conf * 100),
+                "hand_detected":   True,
+                "stable":          is_stable,
+                "stable_count":    stable_count,
+                "stable_needed":   MIN_STABLE_FRAMES,
+                "top_predictions": top_predictions,
+                "hands":           info["count"],
+                "left":            bool(info.get("left")),
+                "right":           bool(info.get("right")),
             }))
 
     except WebSocketDisconnect:
@@ -453,6 +473,8 @@ def cli():
     parser.add_argument("--server",  action="store_true")
     parser.add_argument("--train",   action="store_true")
     parser.add_argument("--collect", type=str, metavar="PALABRA")
+    parser.add_argument("--predict", action="store_true",
+                        help="Inferencia en tiempo real desde la terminal (ventana OpenCV)")
     parser.add_argument("--list",    action="store_true")
     parser.add_argument("--delete",  type=str, metavar="PALABRA")
     parser.add_argument("--samples", type=int, default=200)
@@ -483,6 +505,22 @@ def cli():
         print(f"\n  Recolectando '{w}' — objetivo: {args.samples} muestras")
         print("  [E] grabar/pausar   [Q] salir\n")
         DataCollector(camera_index=args.camera).collect(word=w, target_samples=args.samples)
+        return
+
+    if args.predict:
+        if not storage.model_exists():
+            print("\n  ⚠ No hay modelo entrenado. Ejecuta primero: python main.py --train\n")
+            sys.exit(1)
+        from app.translator import RealTimeTranslator
+        print(f"\n  Iniciando inferencia en vivo (cámara {args.camera})…")
+        print("    Presiona [Q] o ESC para salir.\n")
+        try:
+            RealTimeTranslator(camera_index=args.camera).run()
+        except KeyboardInterrupt:
+            print("\n  Interrumpido por el usuario.")
+        except Exception as e:
+            print(f"\n  ✗ Error: {e}\n")
+            sys.exit(1)
         return
 
     if args.train:

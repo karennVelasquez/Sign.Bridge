@@ -445,7 +445,7 @@ footer{
 
 /* ════ APP ════ */
 #view-app{background:var(--bg)}
-.app-inner{max-width:1020px;margin:0 auto;padding:22px 18px}
+.app-inner{max-width:1600px;margin:0 auto;padding:22px 28px}
 .app-panel{display:none}
 .app-panel.active{display:block}
 
@@ -471,6 +471,43 @@ footer{
 .badge-rec {background:rgba(240,101,101,.12);color:#F06565;border:1px solid rgba(240,101,101,.2);animation:blink-dot .9s infinite}
 
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+
+/* ── Pantallas de cámara MUCHO más grandes en captura y predicción ── */
+#capture-cam-section .grid-2,
+#panel-predict       .grid-2{
+  grid-template-columns: minmax(0, 2.2fr) minmax(260px, 1fr) !important;
+  gap: 18px !important;
+}
+
+/* Cámara ocupa casi todo el alto disponible */
+#capture-cam-section .cam-wrap,
+#panel-predict       .cam-wrap{
+  aspect-ratio: auto !important;
+  min-height: 620px !important;
+  height: 70vh !important;
+  max-height: 780px !important;
+  border-radius: 14px !important;
+}
+
+/* Espejo: la cámara se ve como un espejo (estilo selfie) */
+#video-capture,
+#video-predict{
+  transform: scaleX(-1);
+  -webkit-transform: scaleX(-1);
+}
+
+/* La letra detectada — tamaño moderado para que palabras largas (MAL, BIEN, POCO) quepan */
+#panel-predict .letter-big,
+#capture-cam-section .letter-big{
+  font-size: clamp(40px, 4.5vw, 72px) !important;
+  line-height: 1.05 !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  max-width: 100% !important;
+  text-align: center !important;
+  padding: 0 8px !important;
+  box-sizing: border-box !important;
+}
 
 /* Buttons */
 .btn{display:inline-flex;align-items:center;gap:5px;padding:8px 15px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:var(--fb);transition:all .15s;white-space:nowrap}
@@ -650,6 +687,10 @@ video.active{display:block}
 /* Responsive */
 @media(max-width:700px){
   .grid-2,.how-layout,.form-row,.train-info-grid{grid-template-columns:1fr}
+  #capture-cam-section .grid-2,
+  #panel-predict       .grid-2{grid-template-columns:1fr !important}
+  #capture-cam-section .cam-wrap,
+  #panel-predict       .cam-wrap{min-height:auto !important;height:auto !important;aspect-ratio:4/3 !important}
   .stats-bar,.stats-band{grid-template-columns:1fr 1fr}
   .demo-row{grid-template-columns:1fr}
   .demo-arrow,.arch-step:not(:last-child)::after{display:none}

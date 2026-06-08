@@ -424,43 +424,78 @@ function _setCamUI(mode, on) {
 /* ═══════════════════════════════════════════
    PREDICCIÓN — resultados WS
 ═══════════════════════════════════════════ */
-function handlePrediction({ letter, confidence, hand_detected, stable }) {
-  _updateDetector('cap',  letter, confidence, hand_detected);
-  _updateDetector('pred', letter, confidence, hand_detected);
+function handlePrediction(data) {
+  const {
+    letter, confidence, hand_detected, stable,
+    stable_count = 0, stable_needed = 6,
+    top_predictions = [],
+  } = data;
+
+  _updateDetector('cap',  letter, confidence, hand_detected, stable_count, stable_needed);
+  _updateDetector('pred', letter, confidence, hand_detected, stable_count, stable_needed);
+  _updateTopPredictions(top_predictions);
 
   if (!State.predCamOn) return;
-  if (!stable || !letter || letter === '—' || letter === 'Sin modelo') return;
 
-  const now = Date.now();
-  const isDifferent = letter !== State.lastStableLetter;
-  const cooldownOk  = (now - State.lastStableTime) > State.STABLE_COOLDOWN;
-
-  if (isDifferent || cooldownOk) {
-    State.predHistory.push(letter);
-    if (State.predHistory.length > 50) State.predHistory.shift();
-    _renderPredWord();
-    State.lastStableLetter = letter;
-    State.lastStableTime   = now;
-    State.detectedCount++;
-    State.confSum += confidence;
-    const sl = document.getElementById('s-letters');
-    const sa = document.getElementById('s-acc');
-    if (sl) sl.textContent = State.detectedCount;
-    if (sa) sa.textContent = Math.round(State.confSum / State.detectedCount) + '%';
-    document.querySelectorAll('.alpha-cell').forEach(c => c.classList.remove('detected'));
-    const cell = document.getElementById('alpha-' + letter);
-    if (cell) { cell.classList.add('detected'); setTimeout(() => cell.classList.remove('detected'), 900); }
+  // Misma lógica que el backend RealTimeTranslator:
+  // - Cuando se confirma estable: añadir al historial UNA VEZ (marca _last_added)
+  // - Mientras siga estable: NO volver a añadir
+  // - Cuando deja de ser estable: resetear _last_added
+  // - Si vuelve a aparecer estable (misma u otra letra): añadir de nuevo
+  if (stable && letter && letter !== '—' && letter !== 'Sin modelo') {
+    if (letter !== State.lastStableLetter) {
+      State.predHistory.push(letter);
+      if (State.predHistory.length > 50) State.predHistory.shift();
+      _renderPredWord();
+      State.lastStableLetter = letter;
+      State.detectedCount++;
+      State.confSum += confidence;
+      const sl = document.getElementById('s-letters');
+      const sa = document.getElementById('s-acc');
+      if (sl) sl.textContent = State.detectedCount;
+      if (sa) sa.textContent = Math.round(State.confSum / State.detectedCount) + '%';
+      document.querySelectorAll('.alpha-cell').forEach(c => c.classList.remove('detected'));
+      const cell = document.getElementById('alpha-' + letter);
+      if (cell) { cell.classList.add('detected'); setTimeout(() => cell.classList.remove('detected'), 900); }
+    }
+  } else {
+    // Resetear cuando la predicción se "desestabiliza": permite re-detectar la misma letra
+    State.lastStableLetter = '';
   }
 }
 
-function _updateDetector(mode, letter, confidence, hand) {
+function _updateTopPredictions(top) {
+  // Renderiza el top-5 si existe el contenedor en el panel de predicción
+  const wrap = document.getElementById('top-preds-list');
+  if (!wrap) return;
+  if (!top || top.length === 0) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = top.map((p, i) => {
+    const color = i === 0 && p.conf >= 50 ? 'var(--teal)' : 'var(--muted)';
+    return `
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:4px">
+        <span style="width:28px;color:${color};font-weight:600">${p.label}</span>
+        <div style="flex:1;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${p.conf}%;background:${color}"></div>
+        </div>
+        <span style="width:32px;text-align:right;color:${color};font-size:11px">${p.conf}%</span>
+      </div>`;
+  }).join('');
+}
+
+function _updateDetector(mode, letter, confidence, hand, stable_count, stable_needed) {
   const s  = mode === 'cap' ? '-cap' : '-pred';
   const ld = document.getElementById('letter-display' + s);
   const cl = document.getElementById('conf-label' + s);
   const cf = document.getElementById('conf-fill' + s);
+  const st = document.getElementById('stability' + s);
   if (ld) { ld.textContent = (letter && letter !== '—') ? letter : '—'; ld.className = 'letter-big' + (hand ? '' : ' no-hand'); }
   if (cl) cl.textContent = `Confianza: ${confidence}%`;
   if (cf) cf.style.width = confidence + '%';
+  if (st && typeof stable_count === 'number' && typeof stable_needed === 'number') {
+    const dots = '●'.repeat(Math.min(stable_count, stable_needed))
+               + '○'.repeat(Math.max(0, stable_needed - stable_count));
+    st.textContent = `Estabilidad: ${dots}`;
+  }
 }
 
 function _renderPredWord() {

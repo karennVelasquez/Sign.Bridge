@@ -127,8 +127,8 @@ def _draw_panel(frame, word, count, target, collecting, info, existing):
 
     # Manos detectadas
     hand_txt = ""
-    if info["left"]:  hand_txt += "IZQ "
-    if info["right"]: hand_txt += "DER"
+    if info["left"]:  hand_txt += "DER"
+    if info["right"]: hand_txt += "IZQ"
     if not hand_txt:  hand_txt = "sin manos"
     hand_color = (80, 220, 80) if info["count"] else (80, 80, 200)
     cv2.putText(frame, f"Manos: {hand_txt}", (int(w * 0.45), 30),
