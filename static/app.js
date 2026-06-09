@@ -4,7 +4,7 @@
 
 const WS_URL  = 'ws://localhost:8000/ws/predict';
 const API_URL = 'http://localhost:8000';
-const FPS_MS  = 120;
+const FPS_MS  = 40;   // ~25 fps, similar a backend translator
 const COL_MS  = 100;
 
 // Canvas para predicción WS (compartido)
@@ -47,6 +47,7 @@ const State = {
   confSum: 0,
   seconds: 0,
   demoIdx: 0,
+  _wsPending: false,
 };
 
 /* ═══════════════════════════════════════════
@@ -104,7 +105,7 @@ function connectWS(onOpen) {
     showToast('Conectado al backend', 'success');
     if (onOpen) onOpen();
   };
-  State.ws.onmessage = e => handlePrediction(JSON.parse(e.data));
+  State.ws.onmessage = e => { State._wsPending = false; handlePrediction(JSON.parse(e.data)); };
   State.ws.onerror   = () => {
     setConnStatus(false);
     // Solo mostrar el banner de error si NO estamos en modo captura activa
@@ -120,6 +121,7 @@ function connectWS(onOpen) {
   State.ws.onclose = () => {
     setConnStatus(false);
     clearInterval(State.wsInterval);
+    State._wsPending = false;
   };
 }
 
@@ -393,12 +395,15 @@ function startWsLoop(mode) {
     // No enviar frames al WS mientras se está grabando muestras
     // (evita saturar el extractor de MediaPipe en el servidor)
     if (mode === 'cap' && State.isRecording) return;
+    if (State._wsPending) return;
     const v = document.getElementById(videoId);
     if (!v?.videoWidth) return;
     if (!State.ws || State.ws.readyState !== WebSocket.OPEN) return;
+    State._wsPending = true;
     _ctx.drawImage(v, 0, 0, _canvas.width, _canvas.height);
     _canvas.toBlob(b => {
       if (b && State.ws?.readyState === WebSocket.OPEN) State.ws.send(b);
+      else State._wsPending = false;
     }, 'image/jpeg', 0.85);
   }, FPS_MS);
 }
@@ -445,7 +450,7 @@ function handlePrediction(data) {
   if (stable && letter && letter !== '—' && letter !== 'Sin modelo') {
     if (letter !== State.lastStableLetter) {
       State.predHistory.push(letter);
-      if (State.predHistory.length > 50) State.predHistory.shift();
+      if (State.predHistory.length > 8) State.predHistory.shift();
       _renderPredWord();
       State.lastStableLetter = letter;
       State.detectedCount++;
@@ -621,64 +626,8 @@ function _showTrainChart() {
     img.onerror = () => { console.warn(`[chart] no se pudo cargar ${c.label}`); wrap.style.display = 'none'; };
   });
 
-  // Mostrar el bloque t-SNE (con selector) y poblar el dropdown con las señas entrenadas
-  _populateTsneSelector();
 }
 
-async function _populateTsneSelector() {
-  const wrap   = document.getElementById('tsne-wrap');
-  const select = document.getElementById('tsne-select');
-  if (!wrap || !select) return;
-
-  try {
-    const r     = await fetch(API_URL + '/api/words');
-    const data  = await r.json();
-    const words = data.words || [];
-    if (words.length === 0) {
-      wrap.style.display = 'none';
-      return;
-    }
-    select.innerHTML = '<option value="">— Selecciona una seña —</option>' +
-      words.map(w => `<option value="${w}">${w}</option>`).join('');
-    wrap.style.display = 'block';
-  } catch (err) {
-    console.warn('[tsne] no se pudo obtener lista de señas:', err);
-    wrap.style.display = 'none';
-  }
-}
-
-async function _generateTsne() {
-  const select = document.getElementById('tsne-select');
-  const img    = document.getElementById('tsne-img');
-  const status = document.getElementById('tsne-status');
-  if (!select || !img) return;
-
-  const word = select.value;
-  if (!word) {
-    if (status) status.textContent = 'Selecciona una seña primero';
-    return;
-  }
-
-  if (status) status.textContent = `Generando t-SNE de "${word}"…`;
-  img.style.display = 'none';
-
-  const url = `${API_URL}/api/train/tsne?word=${encodeURIComponent(word)}&t=${Date.now()}`;
-  img.onload = () => {
-    if (status) status.textContent = `✓ t-SNE de "${word}"`;
-    img.style.display = 'block';
-  };
-  img.onerror = () => {
-    if (status) status.textContent = `✗ No se pudo generar (¿muy pocas muestras?)`;
-    img.style.display = 'none';
-  };
-  img.src = url;
-}
-
-// Conectar botón del t-SNE
-document.addEventListener('DOMContentLoaded', () => {
-  const btn = document.getElementById('btn-tsne-generate');
-  if (btn) btn.addEventListener('click', _generateTsne);
-});
 
 // Compatibilidad con el código viejo que llama _updateTrainChart
 function _updateTrainChart() { /* ya no se usa — la imagen se carga al final */ }
@@ -700,15 +649,13 @@ function requestTrain() {
 
   console.log('[train] iniciando…');
 
-  // Leer opciones de los checkboxes
-  const force     = document.getElementById('opt-force')?.checked || false;
-  const skipTsne  = !(document.getElementById('opt-tsne')?.checked || false);
-  console.log('[train] opciones:', { force, skip_tsne: skipTsne });
+  const force = document.getElementById('opt-force')?.checked || false;
+  console.log('[train] opciones:', { force });
 
   fetch(API_URL + '/api/train', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ force, skip_tsne: skipTsne }),
+    body:    JSON.stringify({ force }),
   })
     .then(r => r.json())
     .then(d => {

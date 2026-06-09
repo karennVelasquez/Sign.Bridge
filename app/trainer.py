@@ -447,100 +447,6 @@ def plot_class_distribution(X, y, labels, save_path=None):
     plt.close('all')
 
 
-def plot_tsne_features(X, y, labels, target_label, save_path=None):
-    """
-    Proyección t-SNE 2D de UNA SOLA seña.
-    Muestra la variación interna de las muestras de esa seña en el espacio de features.
-    Útil para detectar muestras anómalas (outliers) y evaluar la consistencia del dataset.
-    """
-    try:
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        from sklearn.manifold import TSNE
-    except ImportError:
-        print("  ⚠ Falta matplotlib o sklearn.")
-        return
-
-    if target_label not in labels:
-        print(f"  ⚠ Seña '{target_label}' no encontrada en labels: {labels}")
-        return
-
-    cls_idx = labels.index(target_label)
-    y_idx   = np.argmax(y, axis=1) if y.ndim > 1 else y
-
-    # Filtrar SOLO las muestras de esa seña
-    mask  = y_idx == cls_idx
-    X_sub = X[mask]
-    if X_sub.ndim > 2:
-        X_sub = X_sub.reshape(X_sub.shape[0], -1)
-
-    n_samples = len(X_sub)
-    if n_samples < 5:
-        print(f"  ⚠ La seña '{target_label}' tiene solo {n_samples} muestras (mínimo 5).")
-        return
-
-    print(f"    Calculando t-SNE de '{target_label}' ({n_samples} muestras)…")
-    # perplexity debe ser < n_samples
-    perplexity = min(30, max(5, n_samples // 4))
-    tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42,
-                init='pca', learning_rate='auto', n_iter=1000)
-    proj = tsne.fit_transform(X_sub)
-
-    # Detectar outliers: puntos lejanos del centroide
-    cx, cy   = proj[:, 0].mean(), proj[:, 1].mean()
-    dists    = np.sqrt((proj[:, 0] - cx)**2 + (proj[:, 1] - cy)**2)
-    threshold = dists.mean() + 1.5 * dists.std()
-    outliers  = dists > threshold
-
-    fig, ax = plt.subplots(figsize=(9, 7), facecolor='#0f1117')
-    ax.set_facecolor('#1a1d27')
-
-    # Puntos normales
-    ax.scatter(proj[~outliers, 0], proj[~outliers, 1],
-               c='#38d9c0', s=55, alpha=0.8,
-               edgecolors='#0f1117', linewidths=0.5,
-               label=f'Muestras normales ({(~outliers).sum()})')
-
-    # Outliers en color distinto
-    if outliers.any():
-        ax.scatter(proj[outliers, 0], proj[outliers, 1],
-                   c='#e05a5a', s=70, alpha=0.85,
-                   edgecolors='#0f1117', linewidths=0.5, marker='X',
-                   label=f'Posibles outliers ({outliers.sum()})')
-
-    # Centroide
-    ax.scatter([cx], [cy], c='#f0c040', s=300, marker='*',
-               edgecolors='black', linewidths=1.2, zorder=10,
-               label='Centroide')
-
-    ax.set_title(f"t-SNE de la seña '{target_label}' — variación interna",
-                 color='white', fontsize=13, fontweight='bold', pad=12)
-    ax.set_xlabel('Componente 1', color='#cccccc', fontsize=10)
-    ax.set_ylabel('Componente 2', color='#cccccc', fontsize=10)
-    ax.tick_params(colors='#cccccc', labelsize=8)
-    ax.grid(True, color='#ffffff10', linewidth=0.6)
-    ax.set_axisbelow(True)
-    for spine in ax.spines.values():
-        spine.set_color('#333344')
-
-    ax.legend(facecolor='#1a1d27', edgecolor='#333344',
-              labelcolor='#cccccc', fontsize=10, loc='best')
-
-    # Nota explicativa
-    fig.text(0.5, -0.02,
-             'Las muestras agrupadas indican consistencia. Los outliers podrían ser muestras mal capturadas.',
-             ha='center', color='#888', fontsize=9, style='italic')
-
-    plt.tight_layout()
-    out = save_path or 'models/tsne_features.png'
-    try:
-        plt.savefig(out, dpi=130, bbox_inches='tight', facecolor=fig.get_facecolor())
-        print(f"    t-SNE guardado en: {out}")
-    except Exception as e:
-        print(f"  ⚠ No se pudo guardar t-SNE: {e}")
-    plt.close('all')
-
 
 class ModelTrainer:
     def __init__(self):
@@ -568,7 +474,23 @@ class ModelTrainer:
         with open("models/dataset_signature.json", "w", encoding="utf-8") as f:
             json.dump(sig, f, indent=2, ensure_ascii=False)
 
-    def train(self, epochs: int = 50, extra_callbacks=None, force: bool = False, skip_tsne: bool = True):
+    def train(self, epochs: int = 50, extra_callbacks=None, force: bool = False):
+        # ── 0. Verificar GPU ───────────────────────────────────────────────
+        try:
+            import tensorflow as tf
+            gpus = tf.config.list_physical_devices("GPU")
+            if gpus:
+                print(f"  ✓ GPU detectada: {len(gpus)} dispositivo(s) → {[g.name for g in gpus]}")
+                # Permitir crecimiento dinámico de memoria (evita reservar toda la VRAM)
+                for g in gpus:
+                    try: tf.config.experimental.set_memory_growth(g, True)
+                    except Exception: pass
+            else:
+                print("  ⚠ No se detectó GPU. Entrenamiento en CPU (más lento).")
+                print("    Para usar GPU instala: tensorflow-gpu + drivers CUDA/cuDNN.")
+        except Exception as e:
+            print(f"  ⚠ No se pudo verificar GPU: {e}")
+
         # ── 1. Cargar datos ────────────────────────────────────────────────
         print("  Cargando dataset…")
         X, y, labels = self.storage.load_dataset()
@@ -705,10 +627,6 @@ class ModelTrainer:
         # ── 11. Distribución de muestras por clase ─────────────────────────
         plot_class_distribution(X, y, labels,
                                 save_path='models/class_distribution.png')
-
-        # ── 12. t-SNE: se genera bajo demanda desde el frontend ────────────
-        # (endpoint GET /api/train/tsne?word=BIEN)
-        # Esto evita el costo computacional de calcularlo automáticamente.
 
         return history, acc
 

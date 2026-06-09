@@ -42,7 +42,7 @@ app.add_middleware(
 
 # ── Singletons ────────────────────────────────────────────────────────────────
 storage         = DataStorage()
-extractor       = HandExtractor(max_hands=2)
+extractor       = HandExtractor(max_hands=2, confidence=0.85)
 _extractor_lock = threading.Lock()
 _model          = None
 _labels         = []
@@ -174,13 +174,12 @@ _train_status = {"running": False, "epoch": 0, "total": 50, "done": False,
 async def train_endpoint(request: Request):
     global _train_status
 
-    # Parámetros opcionales del body JSON: {force: bool, skip_tsne: bool}
+    # Parámetros opcionales del body JSON: {force: bool}
     try:
         body = await request.json()
     except Exception:
         body = {}
-    force     = bool(body.get("force", False))
-    skip_tsne = bool(body.get("skip_tsne", True))
+    force = bool(body.get("force", False))
 
     words = storage.list_words()
     if len(words) < 2:
@@ -239,7 +238,7 @@ async def train_endpoint(request: Request):
                     self._push("✓ Modelo guardado en models/sign_model.keras")
 
             trainer = ModelTrainer()
-            trainer.train(epochs=50, extra_callbacks=[FrontendCallback()], force=force, skip_tsne=skip_tsne)
+            trainer.train(epochs=50, extra_callbacks=[FrontendCallback()], force=force)
             _load_model()
             _train_status["done"]    = True
             _train_status["running"] = False
@@ -298,35 +297,6 @@ def train_class_metrics():
 def train_class_distribution():
     """Distribución de muestras por clase."""
     return _serve_png("models/class_distribution.png")
-
-
-@app.get("/api/train/tsne")
-def train_tsne(word: str = ""):
-    """
-    Genera bajo demanda el t-SNE de UNA seña específica.
-    Si no se especifica `word`, retorna 404 (no hay generación automática).
-    """
-    from fastapi.responses import Response
-    word = word.strip().upper()
-    if not word:
-        return Response(status_code=400, content=b"Falta el parametro 'word'")
-
-    # Generar la imagen al vuelo
-    try:
-        from app.trainer import plot_tsne_features
-        from utils.storage import DataStorage
-        s = DataStorage()
-        X, y, labels = s.load_dataset()
-        if word not in labels:
-            return Response(status_code=404,
-                            content=f"Seña '{word}' no encontrada".encode())
-        plot_tsne_features(X, y, labels, target_label=word,
-                           save_path="models/tsne_features.png")
-    except Exception as e:
-        print(f"⚠ Error generando t-SNE: {e}")
-        return Response(status_code=500, content=str(e).encode())
-
-    return _serve_png("models/tsne_features.png")
 
 
 @app.delete("/api/words/{word}")
@@ -397,6 +367,36 @@ async def websocket_predict(websocket: WebSocket):
                      "left": False, "right": False}
                 ))
                 continue
+
+            # Sanity check: rechazar "manos fantasma" — landmarks demasiado planos o pequeños
+            # Una mano real tiene una extensión razonable; los falsos positivos (audífonos,
+            # gafas, contornos faciales) producen landmarks muy compactos.
+            try:
+                raw_lms = info["raw"].hand_landmarks
+                fake_hand = False
+                for hand_lms in raw_lms:
+                    xs = [lm.x for lm in hand_lms]
+                    ys = [lm.y for lm in hand_lms]
+                    span_x = max(xs) - min(xs)
+                    span_y = max(ys) - min(ys)
+                    # Una mano real ocupa al menos ~6% del ancho/alto del frame
+                    if span_x < 0.06 or span_y < 0.06:
+                        fake_hand = True
+                        break
+                if fake_hand:
+                    pred_buffer.append(None)
+                    stable_count = 0
+                    stable_word  = None
+                    await websocket.send_text(json.dumps(
+                        {"letter": "—", "confidence": 0,
+                         "hand_detected": False, "stable": False,
+                         "stable_count": 0, "stable_needed": MIN_STABLE_FRAMES,
+                         "top_predictions": [], "hands": 0,
+                         "left": False, "right": False}
+                    ))
+                    continue
+            except Exception:
+                pass
 
             with _model_lock:
                 m      = _model
