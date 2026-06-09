@@ -7,7 +7,7 @@
 <link rel="icon" type="image/png" href="/static/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=4">
+<link rel="stylesheet" href="/static/style.css?v=6">
 </head>
 <body>
 
@@ -372,10 +372,6 @@
             <input type="checkbox" id="opt-force" />
             Forzar reentrenamiento (aunque el dataset no haya cambiado)
           </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-            <input type="checkbox" id="opt-tsne" />
-            Generar t-SNE (más lento, +20-60s)
-          </label>
         </div>
 
         <!-- Gráfica de entrenamiento -->
@@ -406,46 +402,6 @@
         <div id="distribution-wrap" style="display:none;margin-top:18px">
           <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">📦 Distribución de muestras por clase</div>
           <img id="distribution-img" alt="Distribución del dataset" style="width:100%;border-radius:10px;background:var(--surface2);display:block" />
-        </div>
-
-        <!-- t-SNE: generación bajo demanda por seña -->
-        <div id="tsne-wrap" style="display:none;margin-top:18px">
-          <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">🌌 t-SNE de una seña (variación interna)</div>
-          <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-            <select id="tsne-select" class="input" style="min-width:160px;padding:8px 12px;border-radius:8px;background:var(--surface2);color:var(--text);border:1px solid var(--surface3)">
-              <option value="">— Selecciona una seña —</option>
-            </select>
-            <button class="btn btn-secondary" id="btn-tsne-generate">Generar t-SNE</button>
-            <span id="tsne-status" style="font-size:12px;color:var(--muted)"></span>
-          </div>
-          <img id="tsne-img" alt="t-SNE features" style="width:100%;border-radius:10px;background:var(--surface2);display:none" />
-        </div>
-      </div>
-    </div>
-
-    <!-- CLI Reference -->
-    <div class="card card-gap">
-      <div class="card-header"><div class="card-title"> Referencia de comandos CLI</div></div>
-      <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
-        <div>
-          <div class="word-label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600">1. Recolectar muestras</div>
-          <div class="cli-block">python main.py --collect HOLA<br>python main.py --collect GRACIAS --samples 300<br>python main.py --list</div>
-        </div>
-        <div>
-          <div class="word-label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600">2. Entrenar</div>
-          <div class="cli-block">python main.py --train<br>python main.py --train --epochs 80</div>
-        </div>
-        <div>
-          <div class="word-label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600">3. Predecir en tiempo real (OpenCV)</div>
-          <div class="cli-block">python main.py<br>python main.py --camera 1</div>
-        </div>
-        <div>
-          <div class="word-label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600">4. Servidor web (este front)</div>
-          <div class="cli-block">python main.py --server</div>
-        </div>
-        <div>
-          <div class="word-label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600">5. Eliminar seña</div>
-          <div class="cli-block">python main.py --delete HOLA</div>
         </div>
       </div>
     </div>

@@ -250,9 +250,9 @@ def _draw_ui(frame, word, conf, probs, labels, history,
     left_c  = (140, 80, 255) if info["left"]  else (50, 50, 80)
     right_c = (80, 100, 255) if info["right"] else (50, 50, 80)
     cv2.circle(frame, (25,  h - 50), 8, left_c,  -1)
-    cv2.putText(frame, "IZQ", (36, h - 44), cv2.FONT_HERSHEY_DUPLEX, 0.4, left_c, 1)
+    cv2.putText(frame, "DER", (36, h - 44), cv2.FONT_HERSHEY_DUPLEX, 0.4, left_c, 1)
     cv2.circle(frame, (100, h - 50), 8, right_c, -1)
-    cv2.putText(frame, "DER", (111, h - 44), cv2.FONT_HERSHEY_DUPLEX, 0.4, right_c, 1)
+    cv2.putText(frame, "IZQ", (111, h - 44), cv2.FONT_HERSHEY_DUPLEX, 0.4, right_c, 1)
 
     # FPS
     cv2.putText(frame, f"{fps} FPS", (panel_w - 65, h - 44),
